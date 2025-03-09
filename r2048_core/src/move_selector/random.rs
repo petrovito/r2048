@@ -1,0 +1,72 @@
+use rand::prelude::*;
+use std::cell::RefCell;
+
+use crate::move_selector::MoveSelector;
+use crate::types::{MoveDirection, Position};
+
+/// A random move selection strategy
+#[derive(Debug, Clone)]
+pub struct RandomSelector {
+    rng: RefCell<ThreadRng>,
+}
+
+impl RandomSelector {
+    /// Creates a new RandomSelector
+    pub fn new() -> Self {
+        Self {
+            rng: RefCell::new(thread_rng()),
+        }
+    }
+}
+
+impl MoveSelector for RandomSelector {
+    fn make_move(&self, position: &Position) -> MoveDirection {
+        // Try each direction to find valid moves
+        let mut valid_moves = Vec::new();
+        
+        for &direction in MoveDirection::all().iter() {
+            let new_position = position.calc_move(direction);
+            if new_position != *position {
+                valid_moves.push(direction);
+            }
+        }
+        
+        let mut rng = self.rng.borrow_mut();
+        if valid_moves.is_empty() {
+            // No valid moves, return a random direction
+            MoveDirection::all()[rng.gen_range(0..4)]
+        } else {
+            // Return a random valid move
+            valid_moves[rng.gen_range(0..valid_moves.len())]
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::Position;
+
+    #[test]
+    fn test_random_selector() {
+        let selector = RandomSelector::new();
+        let position = Position::new();
+        
+        // Just make sure it doesn't crash
+        let _move = selector.make_move(&position);
+    }
+    
+    #[test]
+    fn test_valid_moves() {
+        let selector = RandomSelector::new();
+        
+        // Create a position with only one valid move (right)
+        let mut position = Position::new();
+        position.set(0, 0, 2);
+        position.set(0, 1, 4);
+        
+        // The only valid move should be right
+        let direction = selector.make_move(&position);
+        assert_eq!(direction, MoveDirection::Right);
+    }
+} 
