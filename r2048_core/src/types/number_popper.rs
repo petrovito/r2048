@@ -1,6 +1,5 @@
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
-use serde::ser::{Serializer, SerializeStruct};
 
 use super::position::Position;
 
@@ -15,8 +14,9 @@ pub struct NumberPopper {
 impl Serialize for NumberPopper {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: Serializer,
+        S: serde::Serializer,
     {
+        use serde::ser::SerializeStruct;
         let mut state = serializer.serialize_struct("NumberPopper", 1)?;
         state.serialize_field("four_probability", &self.four_probability)?;
         state.end()

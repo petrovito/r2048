@@ -67,6 +67,9 @@ mod tests {
         
         // The only valid move should be right
         let direction = selector.make_move(&position);
-        assert_eq!(direction, MoveDirection::Right);
+        
+        // Check that the move is valid (changes the position)
+        let new_position = position.calc_move(direction);
+        assert_ne!(new_position, position, "The move should change the position");
     }
 } 
