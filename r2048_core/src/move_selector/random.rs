@@ -26,7 +26,7 @@ impl MoveSelector for RandomSelector {
         
         for &direction in MoveDirection::all().iter() {
             let new_position = position.calc_move(direction);
-            if new_position != *position {
+            if new_position.is_ok() {
                 valid_moves.push(direction);
             }
         }
@@ -70,6 +70,6 @@ mod tests {
         
         // Check that the move is valid (changes the position)
         let new_position = position.calc_move(direction);
-        assert_ne!(new_position, position, "The move should change the position");
+        assert!(new_position.is_ok(), "The move should be valid");
     }
 } 

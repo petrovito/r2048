@@ -47,7 +47,7 @@ impl MoveSelector for MinimaxSelector {
                 // If no move is selected, fall back to a random valid move
                 let valid_moves: Vec<MoveDirection> = MoveDirection::all()
                     .iter()
-                    .filter(|&&dir| position.calc_move(dir) != *position)
+                    .filter(|&&dir| position.calc_move(dir).is_ok())
                     .cloned()
                     .collect();
                 

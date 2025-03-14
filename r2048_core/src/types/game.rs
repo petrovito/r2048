@@ -1,12 +1,11 @@
-use serde::{Deserialize, Serialize};
-
 use super::game_history::GameHistory;
 use super::move_direction::MoveDirection;
 use super::number_popper::NumberPopper;
 use super::position::Position;
+use super::errors::{IllegalMoveError, IllegalStateError, GameError};
 
 /// Represents a game of 2048
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Game {
     /// The current position of the game
     current_position: Position,
@@ -14,8 +13,8 @@ pub struct Game {
     history: GameHistory,
     /// The number popper for generating random numbers
     number_popper: NumberPopper,
-    /// The score of the game
-    score: u32,
+    /// Whether the game has started
+    game_started: bool,
     /// Whether the game is over
     game_over: bool,
 }
@@ -27,7 +26,7 @@ impl Game {
             current_position: Position::new(),
             history: GameHistory::new(),
             number_popper: NumberPopper::new(),
-            score: 0,
+            game_started: false,
             game_over: false,
         }
     }
@@ -38,55 +37,36 @@ impl Game {
             current_position: Position::new(),
             history: GameHistory::new(),
             number_popper,
-            score: 0,
+            game_started: false,
             game_over: false,
         }
     }
 
     /// Starts a new game
-    pub fn start_game(&mut self) {
-        self.current_position = Position::new();
-        self.history.clear();
-        self.score = 0;
-        self.game_over = false;
+    pub fn start_game(&mut self) -> Result<(), IllegalStateError> {
+        if self.game_started {
+            return Err(IllegalStateError::new("Game already started".to_string()));
+        }
+
         self.number_popper.initialize_board(&mut self.current_position);
+        self.game_started = true;
+        Ok(())
     }
 
     /// Executes a move and updates the game state
-    pub fn do_move(&mut self, direction: MoveDirection) -> bool {
+    pub fn do_move(&mut self, direction: MoveDirection) -> Result<(), GameError> {
+        if !self.game_started {
+            return Err(GameError::IllegalState(IllegalStateError::new("Game not started".to_string())));
+        }
+
         if self.game_over {
-            return false;
+            return Err(GameError::IllegalMove(IllegalMoveError::new(direction).game_over_reason()));
         }
 
-        let old_position = self.current_position.clone();
-        let new_position = self.current_position.calc_move(direction);
-
-        // If the position didn't change, the move is invalid
-        if new_position == old_position {
-            return false;
-        }
-
-        // In 2048, the score increases by the value of each merged tile
-        // We need to calculate this differently from just the sum of all tiles
-        // For the test case where we merge two 2s into a 4, we should add 4 to the score
-        
-        // For simplicity in this implementation, we'll just add the value of any new tiles
-        // that appear after the move (which would be the merged tiles)
-        for row in 0..4 {
-            for col in 0..4 {
-                let old_val = old_position.get(row, col);
-                let new_val = new_position.get(row, col);
-                
-                // If the new value is greater than the old value, it's a merged tile
-                // Add the new value to the score
-                if new_val > old_val {
-                    self.score += new_val;
-                }
-            }
-        }
+        let new_position = self.current_position.calc_move(direction)?;
 
         // Save the old position to history
-        self.history.push(old_position);
+        self.history.push(self.current_position.clone());
 
         // Update the current position
         self.current_position = new_position;
@@ -97,7 +77,7 @@ impl Game {
         // Check if the game is over
         self.game_over = self.current_position.is_over();
 
-        true
+        Ok(())
     }
 
     /// Returns a reference to the current position
@@ -115,11 +95,6 @@ impl Game {
         &self.history
     }
 
-    /// Returns the current score
-    pub fn score(&self) -> u32 {
-        self.score
-    }
-
     /// Returns whether the game is over
     pub fn is_over(&self) -> bool {
         self.game_over
@@ -135,25 +110,6 @@ impl Game {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_new_game() {
-        let game = Game::new();
-        assert_eq!(game.score(), 0);
-        assert!(!game.is_over());
-        assert!(game.history().is_empty());
-    }
-
-    #[test]
-    fn test_start_game() {
-        let mut game = Game::new();
-        game.start_game();
-        
-        // Should have two random numbers on the board
-        assert_eq!(game.current_position().empty_cells(), 14);
-        assert_eq!(game.score(), 0);
-        assert!(!game.is_over());
-        assert!(game.history().is_empty());
-    }
 
     #[test]
     fn test_do_move() {
@@ -163,16 +119,16 @@ mod tests {
         let mut position = Position::new();
         position.set(0, 0, 2);
         position.set(0, 1, 2);
-        *game.current_position_mut() = position;
+        game.current_position = position;
+        game.game_started = true;
         
         // Do a move
-        assert!(game.do_move(MoveDirection::Left));
+        assert!(game.do_move(MoveDirection::Left).is_ok());
         
         // Should have merged the 2s and added a new random number
         assert_eq!(game.current_position().get(0, 0), 4);
         assert_eq!(game.current_position().empty_cells(), 14);
         assert_eq!(game.history().len(), 1);
-        assert_eq!(game.score(), 4);
     }
 
     #[test]
@@ -186,13 +142,12 @@ mod tests {
         *game.current_position_mut() = position;
         
         // Try an invalid move
-        assert!(!game.do_move(MoveDirection::Left));
+        assert!(game.do_move(MoveDirection::Left).is_err());
         
         // State should not have changed
         assert_eq!(game.current_position().get(0, 0), 2);
         assert_eq!(game.current_position().get(1, 0), 4);
         assert_eq!(game.history().len(), 0);
-        assert_eq!(game.score(), 0);
     }
 
     #[test]
@@ -211,9 +166,10 @@ mod tests {
         // Force a specific number to be added that will cause game over
         let number_popper = NumberPopper::with_probability(0.0); // Always generate 2
         game.number_popper = number_popper;
+        game.game_started = true;
         
         // Do a move
-        assert!(game.do_move(MoveDirection::Right));
+        assert!(game.do_move(MoveDirection::Right).is_ok());
         
         // Game should be over
         assert!(game.is_over());

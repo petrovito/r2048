@@ -52,8 +52,8 @@ impl MCTSNode {
             let new_position = self.position.calc_move(direction);
             
             // Only add the child if the move changes the position
-            if new_position != self.position {
-                let child = MCTSNode::new(new_position, Some(direction));
+            if new_position.is_ok() {
+                let child = MCTSNode::new(new_position.unwrap(), Some(direction));
                 self.children.push(child);
             }
         }
@@ -185,7 +185,7 @@ impl MoveSelector for MCTSSelector {
                 // If no move is selected, fall back to a random valid move
                 let valid_moves: Vec<MoveDirection> = MoveDirection::all()
                     .iter()
-                    .filter(|&&dir| position.calc_move(dir) != *position)
+                    .filter(|&&dir| position.calc_move(dir).is_ok())
                     .cloned()
                     .collect();
                 

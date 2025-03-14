@@ -36,6 +36,7 @@ impl Default for EnvSpecs {
 }
 
 /// Acts as the dependency injector
+#[allow(dead_code)]
 pub struct Environment {
     specs: EnvSpecs,
     game: Game,

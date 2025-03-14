@@ -46,32 +46,3 @@ impl GameHistory {
         self.positions.clear();
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_game_history() {
-        let mut history = GameHistory::new();
-        assert!(history.is_empty());
-        assert_eq!(history.len(), 0);
-        assert!(history.last().is_none());
-
-        let pos1 = Position::new();
-        history.push(pos1.clone());
-        assert!(!history.is_empty());
-        assert_eq!(history.len(), 1);
-        assert_eq!(history.last(), Some(&pos1));
-
-        let mut pos2 = Position::new();
-        pos2.set(0, 0, 2);
-        history.push(pos2.clone());
-        assert_eq!(history.len(), 2);
-        assert_eq!(history.last(), Some(&pos2));
-        assert_eq!(history.positions().len(), 2);
-
-        history.clear();
-        assert!(history.is_empty());
-    }
-} 

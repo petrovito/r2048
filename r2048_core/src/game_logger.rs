@@ -42,8 +42,7 @@ impl GameLogger {
     /// Logs a complete game
     pub fn log_game(&self, game: &Game) {
         info!(
-            "Game completed. Score: {}, Highest tile: {}",
-            game.score(),
+            "Game completed. Highest tile: {}",
             game.highest_tile()
         );
 

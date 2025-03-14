@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 
 use super::move_direction::MoveDirection;
+use super::errors::IllegalMoveError;
 
 /// Represents a 2048 game board (4x4 grid)
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -36,7 +37,7 @@ impl Position {
     }
 
     /// Calculates the result of a move in the given direction
-    pub fn calc_move(&self, direction: MoveDirection) -> Position {
+    pub fn calc_move(&self, direction: MoveDirection) -> Result<Position, IllegalMoveError> {
         let mut new_position = self.clone();
         let mut moved = false;
 
@@ -64,9 +65,9 @@ impl Position {
         }
 
         if moved {
-            new_position
+            Ok(new_position)
         } else {
-            self.clone()
+            Err(IllegalMoveError::new(direction))
         }
     }
 
@@ -389,7 +390,7 @@ mod tests {
             [4, 0, 0, 0],
             [4, 4, 0, 0],
         ];
-        assert_eq!(new_pos.grid(), &expected);
+        assert_eq!(new_pos.unwrap().grid(), &expected);
     }
 
     #[test]
@@ -409,7 +410,7 @@ mod tests {
             [0, 0, 0, 4],
             [0, 0, 4, 4],
         ];
-        assert_eq!(new_pos.grid(), &expected);
+        assert_eq!(new_pos.unwrap().grid(), &expected);
     }
 
     #[test]
@@ -429,7 +430,7 @@ mod tests {
             [0, 0, 0, 0],
             [0, 0, 0, 0],
         ];
-        assert_eq!(new_pos.grid(), &expected);
+        assert_eq!(new_pos.unwrap().grid(), &expected);
     }
 
     #[test]
@@ -449,7 +450,7 @@ mod tests {
             [0, 0, 0, 2],
             [4, 4, 4, 4],
         ];
-        assert_eq!(new_pos.grid(), &expected);
+        assert_eq!(new_pos.unwrap().grid(), &expected);
     }
 
     #[test]

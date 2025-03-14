@@ -49,9 +49,9 @@ impl GameTreeCreator {
             let new_position = node.position.calc_move(direction);
             
             // Only add the child if the move changes the position
-            if new_position != node.position {
+            if new_position.is_ok() {
                 let child = GameTreeNode {
-                    position: new_position,
+                    position: new_position.unwrap(),
                     move_direction: Some(direction),
                     children: Vec::new(),
                     score: None,

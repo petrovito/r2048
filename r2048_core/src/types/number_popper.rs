@@ -1,5 +1,4 @@
 use rand::prelude::*;
-use serde::{Deserialize, Serialize};
 
 use super::position::Position;
 
@@ -11,35 +10,6 @@ pub struct NumberPopper {
     pub four_probability: f32,
 }
 
-impl Serialize for NumberPopper {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        use serde::ser::SerializeStruct;
-        let mut state = serializer.serialize_struct("NumberPopper", 1)?;
-        state.serialize_field("four_probability", &self.four_probability)?;
-        state.end()
-    }
-}
-
-impl<'de> Deserialize<'de> for NumberPopper {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        #[derive(Deserialize)]
-        struct NumberPopperDef {
-            four_probability: f32,
-        }
-
-        let def = NumberPopperDef::deserialize(deserializer)?;
-        Ok(NumberPopper {
-            rng: thread_rng(),
-            four_probability: def.four_probability,
-        })
-    }
-}
 
 impl NumberPopper {
     /// Creates a new NumberPopper with default settings

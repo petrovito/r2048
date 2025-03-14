@@ -1,6 +1,7 @@
 use crate::game_logger::GameLogger;
 use crate::move_selector::MoveSelector;
 use crate::types::Game;
+use crate::types::GameError;
 use crate::ui::UIHandler;
 
 /// Coordinates game execution
@@ -29,26 +30,24 @@ impl GamePlayer {
 
     /// Plays a complete game
     pub fn play_a_game(&mut self) {
-        self.game.start_game();
+        let _ = self.game.start_game();
         self.ui_handler.show_position(self.game.current_position());
-        self.ui_handler.show_score(self.game.score());
 
         while !self.game.is_over() {
-            self.play_a_move();
+            let _ = self.play_a_move();
         }
 
-        self.ui_handler.show_game_over(self.game.score(), self.game.highest_tile());
+        //self.ui_handler.show_game_over(self.game.highest_tile());
         self.game_logger.log_game(&self.game);
     }
 
     /// Plays a single move
-    pub fn play_a_move(&mut self) {
+    pub fn play_a_move(&mut self) -> Result<(), GameError> {
         let direction = self.move_selector.make_move(self.game.current_position());
-        if self.game.do_move(direction) {
-            self.ui_handler.show_move(direction);
-            self.ui_handler.show_position(self.game.current_position());
-            self.ui_handler.show_score(self.game.score());
-        }
+        self.game.do_move(direction)?;
+        self.ui_handler.show_move(direction);
+        self.ui_handler.show_position(self.game.current_position());
+        Ok(())
     }
 
     /// Returns a reference to the game

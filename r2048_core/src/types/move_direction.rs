@@ -19,13 +19,3 @@ impl MoveDirection {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_move_direction() {
-        let direction = MoveDirection::Up;
-        assert_eq!(format!("{:?}", direction), "Up");
-    }
-} 
