@@ -42,6 +42,10 @@ impl IllegalStateError {
     pub fn new(message: String) -> Self {
         Self { message }
     }
+
+    pub fn from_str(message: &str) -> Self {
+        Self { message: message.to_string() }
+    }
 }
 
 impl fmt::Display for IllegalStateError {

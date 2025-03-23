@@ -1,7 +1,11 @@
 use std::time::{Duration, Instant};
 
-use crate::move_selector::{MoveSelector, tools::{NodeEvaluator, SimpleNodeEvaluator}};
-use crate::types::{MoveDirection, Position};
+use crate::{
+    move_selector::{
+        tools::{NodeEvaluator, SimpleNodeEvaluator}, 
+        MoveSelector}, 
+    types::{MoveDirection, Position, GameError, IllegalStateError}
+};
 
 /// A node in the Monte Carlo Tree Search
 #[derive(Debug, Clone)]
@@ -173,29 +177,31 @@ impl MCTSSelector {
 }
 
 impl MoveSelector for MCTSSelector {
-    fn make_move(&self, position: &Position) -> MoveDirection {
+    fn make_move(&self, position: &Position) -> Result<MoveDirection, GameError> {
         let root = self.run_mcts(position);
         
         // Select the child with the most visits
-        root.children
+        if let Some(best_child) = root.children
             .iter()
-            .max_by_key(|child| child.visits)
-            .and_then(|best_child| best_child.move_direction)
-            .unwrap_or_else(|| {
-                // If no move is selected, fall back to a random valid move
-                let valid_moves: Vec<MoveDirection> = MoveDirection::all()
-                    .iter()
-                    .filter(|&&dir| position.calc_move(dir).is_ok())
-                    .cloned()
-                    .collect();
-                
-                if valid_moves.is_empty() {
-                    // If no valid moves, just return Up
-                    MoveDirection::Up
-                } else {
-                    // Return the first valid move
-                    valid_moves[0]
-                }
-            })
+            .max_by_key(|child| child.visits) {
+            if let Some(move_direction) = best_child.move_direction {
+                Ok(move_direction)
+            } else {
+                Err(IllegalStateError::from_str("No move direction found").into())
+            }
+        } else {
+            // If no move is selected, fall back to a random valid move
+            let valid_moves: Vec<MoveDirection> = MoveDirection::all()
+                .iter()
+                .filter(|&&dir| position.calc_move(dir).is_ok())
+                .cloned()
+                .collect();
+            
+            if valid_moves.is_empty() {
+                Err(IllegalStateError::from_str("No valid moves").into())
+            } else {
+                Ok(valid_moves[0])
+            }
+        }
     }
 } 

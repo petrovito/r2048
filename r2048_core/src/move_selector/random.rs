@@ -2,7 +2,7 @@ use rand::prelude::*;
 use std::cell::RefCell;
 
 use crate::move_selector::MoveSelector;
-use crate::types::{MoveDirection, Position};
+use crate::types::{MoveDirection, Position, GameError, IllegalStateError};
 
 /// A random move selection strategy
 #[derive(Debug, Clone)]
@@ -20,7 +20,7 @@ impl RandomSelector {
 }
 
 impl MoveSelector for RandomSelector {
-    fn make_move(&self, position: &Position) -> MoveDirection {
+    fn make_move(&self, position: &Position) -> Result<MoveDirection, GameError> {
         // Try each direction to find valid moves
         let mut valid_moves = Vec::new();
         
@@ -34,10 +34,10 @@ impl MoveSelector for RandomSelector {
         let mut rng = self.rng.borrow_mut();
         if valid_moves.is_empty() {
             // No valid moves, return a random direction
-            MoveDirection::all()[rng.gen_range(0..4)]
+            Err(IllegalStateError::new(String::from("No valid moves")).into())
         } else {
             // Return a random valid move
-            valid_moves[rng.gen_range(0..valid_moves.len())]
+            Ok(valid_moves[rng.gen_range(0..valid_moves.len())])
         }
     }
 }
@@ -67,6 +67,8 @@ mod tests {
         
         // The only valid move should be right
         let direction = selector.make_move(&position);
+        assert!(direction.is_ok(), "The move should be valid");
+        let direction = direction.unwrap();
         
         // Check that the move is valid (changes the position)
         let new_position = position.calc_move(direction);
