@@ -43,7 +43,7 @@ impl GamePlayer {
 
     /// Plays a single move
     pub fn play_a_move(&mut self) -> Result<(), GameError> {
-        let direction = self.move_selector.make_move(self.game.current_position())?;
+        let direction = self.move_selector.select_move(self.game.current_position())?;
         self.game.do_move(direction)?;
         self.ui_handler.show_move(direction);
         self.ui_handler.show_position(self.game.current_position());

@@ -1,11 +1,11 @@
 use std::time::{Duration, Instant};
 
 use crate::{
-    move_selector::{
-        tools::{NodeEvaluator, SimpleNodeEvaluator}, 
-        MoveSelector}, 
-    types::{MoveDirection, Position, GameError, IllegalStateError}
+    move_selector::MoveSelector, 
+    types::{MoveDirection, Position, GameError, IllegalStateError, MoveMaker},
 };
+
+use super::tools::rollout::RolloutRunner;
 
 /// A node in the Monte Carlo Tree Search
 #[derive(Debug, Clone)]
@@ -47,17 +47,14 @@ impl MCTSNode {
     }
     
     /// Expands this node by generating its children
-    fn expand(&mut self) {
+    fn expand(&mut self, move_maker: &MoveMaker) {
         if !self.children.is_empty() {
             return;
         }
         
         for &direction in MoveDirection::all().iter() {
-            let new_position = self.position.calc_move(direction);
-            
-            // Only add the child if the move changes the position
-            if new_position.is_ok() {
-                let child = MCTSNode::new(new_position.unwrap(), Some(direction));
+            if let Ok(new_position) = move_maker.make_move(&self.position, direction) {
+                let child = MCTSNode::new(new_position, Some(direction));
                 self.children.push(child);
             }
         }
@@ -92,17 +89,20 @@ pub struct MCTSSelector {
     /// The exploration weight for UCB
     exploration_weight: f32,
     /// The node evaluator for leaf nodes
-    node_evaluator: Box<dyn NodeEvaluator>,
+    rollout_runner: Box<dyn RolloutRunner>,
+    /// The move maker for checking and making moves
+    move_maker: MoveMaker,
 }
 
 impl MCTSSelector {
     /// Creates a new MCTSSelector with default settings
-    pub fn new() -> Self {
+    pub fn new(rollout_runner: Box<dyn RolloutRunner>) -> Self {
         Self {
             max_iterations: 1000,
             max_time: Duration::from_secs(1),
             exploration_weight: 1.0,
-            node_evaluator: Box::new(SimpleNodeEvaluator::new()),
+            rollout_runner,
+            move_maker: MoveMaker::new(),
         }
     }
     
@@ -111,13 +111,14 @@ impl MCTSSelector {
         max_iterations: usize,
         max_time: Duration,
         exploration_weight: f32,
-        node_evaluator: Box<dyn NodeEvaluator>,
+        rollout_runner: Box<dyn RolloutRunner>,
     ) -> Self {
         Self {
             max_iterations,
             max_time,
             exploration_weight,
-            node_evaluator,
+            rollout_runner,
+            move_maker: MoveMaker::new(),
         }
     }
     
@@ -147,7 +148,7 @@ impl MCTSSelector {
             
             // Expand if the node is not terminal and has no children
             if !current.position.is_over() && current.children.is_empty() {
-                current.expand();
+                current.expand(&self.move_maker);
                 
                 // If children were added, select one of them
                 if let Some(child_index) = current.select_child(self.exploration_weight) {
@@ -157,17 +158,17 @@ impl MCTSSelector {
             }
             
             // Simulation (evaluate the leaf node)
-            let score = self.node_evaluator.evaluate_position(&current.position);
+            let rollout_result = self.rollout_runner.rollout(&current.position);
             
             // Backpropagation
             current.visits += 1;
-            current.total_score += score;
+            current.total_score += rollout_result.score;
             
             for node_ptr in path {
                 unsafe {
                     let node = &mut *node_ptr;
                     node.visits += 1;
-                    node.total_score += score;
+                    node.total_score += rollout_result.score;
                 }
             }
         }
@@ -177,7 +178,7 @@ impl MCTSSelector {
 }
 
 impl MoveSelector for MCTSSelector {
-    fn make_move(&self, position: &Position) -> Result<MoveDirection, GameError> {
+    fn select_move(&self, position: &Position) -> Result<MoveDirection, GameError> {
         let root = self.run_mcts(position);
         
         // Select the child with the most visits
@@ -193,7 +194,7 @@ impl MoveSelector for MCTSSelector {
             // If no move is selected, fall back to a random valid move
             let valid_moves: Vec<MoveDirection> = MoveDirection::all()
                 .iter()
-                .filter(|&&dir| position.calc_move(dir).is_ok())
+                .filter(|&&dir| self.move_maker.make_move(position, dir).is_ok())
                 .cloned()
                 .collect();
             
@@ -203,5 +204,9 @@ impl MoveSelector for MCTSSelector {
                 Ok(valid_moves[0])
             }
         }
+    }
+
+    fn set_move_maker(&mut self, move_maker: &MoveMaker) {
+        self.move_maker = move_maker.clone();
     }
 } 

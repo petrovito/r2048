@@ -2,12 +2,13 @@ use rand::prelude::*;
 use std::cell::RefCell;
 
 use crate::move_selector::MoveSelector;
-use crate::types::{MoveDirection, Position, GameError, IllegalStateError};
+use crate::types::{MoveDirection, Position, GameError, IllegalStateError, MoveMaker};
 
 /// A random move selection strategy
 #[derive(Debug, Clone)]
 pub struct RandomSelector {
     rng: RefCell<ThreadRng>,
+    move_maker: MoveMaker,
 }
 
 impl RandomSelector {
@@ -15,30 +16,34 @@ impl RandomSelector {
     pub fn new() -> Self {
         Self {
             rng: RefCell::new(thread_rng()),
+            move_maker: MoveMaker::new(),
         }
     }
 }
 
 impl MoveSelector for RandomSelector {
-    fn make_move(&self, position: &Position) -> Result<MoveDirection, GameError> {
+    fn select_move(&self, position: &Position) -> Result<MoveDirection, GameError> {
         // Try each direction to find valid moves
         let mut valid_moves = Vec::new();
         
         for &direction in MoveDirection::all().iter() {
-            let new_position = position.calc_move(direction);
-            if new_position.is_ok() {
+            if self.move_maker.make_move(position, direction).is_ok() {
                 valid_moves.push(direction);
             }
         }
         
-        let mut rng = self.rng.borrow_mut();
         if valid_moves.is_empty() {
             // No valid moves, return a random direction
             Err(IllegalStateError::new(String::from("No valid moves")).into())
         } else {
             // Return a random valid move
-            Ok(valid_moves[rng.gen_range(0..valid_moves.len())])
+            let target_index = self.rng.borrow_mut().gen_range(0..valid_moves.len());
+            Ok(valid_moves[target_index])
         }
+    }
+
+    fn set_move_maker(&mut self, move_maker: &MoveMaker) {
+        self.move_maker = move_maker.clone();
     }
 }
 
@@ -53,7 +58,7 @@ mod tests {
         let position = Position::new();
         
         // Just make sure it doesn't crash
-        let _move = selector.make_move(&position);
+        let _move = selector.select_move(&position);
     }
     
     #[test]
@@ -66,12 +71,11 @@ mod tests {
         position.set(0, 1, 4);
         
         // The only valid move should be right
-        let direction = selector.make_move(&position);
+        let direction = selector.select_move(&position);
         assert!(direction.is_ok(), "The move should be valid");
         let direction = direction.unwrap();
         
-        // Check that the move is valid (changes the position)
-        let new_position = position.calc_move(direction);
-        assert!(new_position.is_ok(), "The move should be valid");
+        // Check that the move is valid
+        assert!(selector.move_maker.make_move(&position, direction).is_ok(), "The move should be valid");
     }
 } 

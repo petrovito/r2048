@@ -37,7 +37,7 @@ impl Position {
     }
 
     /// Calculates the result of a move in the given direction
-    pub fn calc_move(&self, direction: MoveDirection) -> Result<Position, IllegalMoveError> {
+    pub(in crate::types) fn calc_move(&self, direction: MoveDirection) -> Result<Position, IllegalMoveError> {
         let mut new_position = self.clone();
         let mut moved = false;
 

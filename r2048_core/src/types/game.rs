@@ -1,8 +1,8 @@
 use super::game_history::GameHistory;
 use super::move_direction::MoveDirection;
-use super::number_popper::NumberPopper;
 use super::position::Position;
 use super::errors::{IllegalMoveError, IllegalStateError, GameError};
+use super::move_maker::MoveMaker;
 
 /// Represents a game of 2048
 #[derive(Debug, Clone)]
@@ -11,8 +11,8 @@ pub struct Game {
     current_position: Position,
     /// The history of positions in the game
     history: GameHistory,
-    /// The number popper for generating random numbers
-    number_popper: NumberPopper,
+    /// The move maker that handles move mechanics
+    move_maker: MoveMaker,
     /// Whether the game has started
     game_started: bool,
     /// Whether the game is over
@@ -25,18 +25,18 @@ impl Game {
         Self {
             current_position: Position::new(),
             history: GameHistory::new(),
-            number_popper: NumberPopper::new(),
+            move_maker: MoveMaker::new(),
             game_started: false,
             game_over: false,
         }
     }
 
-    /// Creates a new game with a custom number popper
-    pub fn with_number_popper(number_popper: NumberPopper) -> Self {
+    /// Creates a new game with a custom move maker
+    pub fn with_move_maker(move_maker: MoveMaker) -> Self {
         Self {
             current_position: Position::new(),
             history: GameHistory::new(),
-            number_popper,
+            move_maker,
             game_started: false,
             game_over: false,
         }
@@ -48,7 +48,7 @@ impl Game {
             return Err(IllegalStateError::new("Game already started".to_string()));
         }
 
-        self.number_popper.initialize_board(&mut self.current_position);
+        self.move_maker.initialize_board(&mut self.current_position);
         self.game_started = true;
         Ok(())
     }
@@ -63,16 +63,11 @@ impl Game {
             return Err(GameError::IllegalMove(IllegalMoveError::new(direction).game_over_reason()));
         }
 
-        let new_position = self.current_position.calc_move(direction)?;
-
         // Save the old position to history
         self.history.push(self.current_position.clone());
 
-        // Update the current position
-        self.current_position = new_position;
-
-        // Add a new random number
-        self.number_popper.pop_random_number(&mut self.current_position);
+        // Make the move
+        self.current_position = self.move_maker.make_move(&self.current_position, direction)?;
 
         // Check if the game is over
         self.game_over = self.current_position.is_over();
@@ -109,7 +104,6 @@ impl Game {
 #[cfg(test)]
 mod tests {
     use super::*;
-
 
     #[test]
     fn test_do_move() {
@@ -163,9 +157,8 @@ mod tests {
         ];
         *game.current_position_mut() = Position::with_grid(grid);
         
-        // Force a specific number to be added that will cause game over
-        let number_popper = NumberPopper::with_probability(0.0); // Always generate 2
-        game.number_popper = number_popper;
+        let move_maker = MoveMaker::new();
+        game.move_maker = move_maker;
         game.game_started = true;
         
         // Do a move

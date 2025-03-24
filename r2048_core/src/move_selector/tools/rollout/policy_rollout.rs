@@ -1,7 +1,7 @@
 use rand::distributions::{Distribution, WeightedIndex};
 use rand::rngs::ThreadRng;
 use rand::thread_rng;
-use crate::types::{MoveDirection, Position};
+use crate::types::{MoveDirection, Position, MoveMaker};
 use crate::types::errors::{GameError, IllegalStateError};
 use std::cell::RefCell;
 
@@ -13,26 +13,29 @@ pub struct PolicyRollout<M: MovePolicyProvider> {
     num_rollouts: usize,
     max_depth: usize,
     rng: RefCell<ThreadRng>,
+    move_maker: MoveMaker,
 }
 
 impl<M: MovePolicyProvider> PolicyRollout<M> {
     /// Creates a new PolicyRollout with the given MovePolicyProvider
-    pub fn new(move_policy_provider: M) -> Self {
+    pub fn new(move_policy_provider: M, move_maker: MoveMaker) -> Self {
         Self { 
             move_policy_provider,
             num_rollouts: 100,    // Default number of rollouts
             max_depth: 200,       // Default max depth of each rollout
             rng: RefCell::new(thread_rng()),
+            move_maker,
         }
     }
 
     /// Creates a new PolicyRollout with custom parameters
-    pub fn with_params(move_policy_provider: M, num_rollouts: usize, max_depth: usize) -> Self {
+    pub fn with_params(move_policy_provider: M, num_rollouts: usize, max_depth: usize, move_maker: MoveMaker) -> Self {
         Self {
             move_policy_provider,
             num_rollouts,
             max_depth,
             rng: RefCell::new(thread_rng()),
+            move_maker,
         }
     }
 }
@@ -77,7 +80,7 @@ impl<M: MovePolicyProvider> PolicyRollout<M> {
             let selected_move = self.select_move_from_policy(&policy)?;
             
             // Make the move
-            position = match position.calc_move(selected_move) {
+            position = match self.move_maker.make_move(&position, selected_move) {
                 Ok(new_position) => new_position,
                 Err(err) => return Err(err.into()),
             };

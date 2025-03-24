@@ -1,21 +1,21 @@
 use rand::prelude::*;
+use std::cell::RefCell;
 
 use super::position::Position;
 
 /// Handles random number generation on the board
 #[derive(Debug, Clone)]
 pub struct NumberPopper {
-    rng: ThreadRng,
+    rng: RefCell<ThreadRng>,
     /// Probability of generating a 4 (vs a 2)
     pub four_probability: f32,
 }
-
 
 impl NumberPopper {
     /// Creates a new NumberPopper with default settings
     pub fn new() -> Self {
         Self {
-            rng: thread_rng(),
+            rng: RefCell::new(thread_rng()),
             four_probability: 0.1,
         }
     }
@@ -23,20 +23,20 @@ impl NumberPopper {
     /// Creates a new NumberPopper with custom settings
     pub fn with_probability(four_probability: f32) -> Self {
         Self {
-            rng: thread_rng(),
+            rng: RefCell::new(thread_rng()),
             four_probability,
         }
     }
 
     /// Adds a random number (2 or 4) to a random empty cell
-    pub fn pop_random_number(&mut self, position: &mut Position) -> bool {
+    pub fn pop_random_number(&self, position: &mut Position) -> bool {
         let empty_count = position.empty_cells();
         if empty_count == 0 {
             return false;
         }
 
         // Choose a random empty cell
-        let target_index = self.rng.gen_range(0..empty_count);
+        let target_index = self.rng.borrow_mut().gen_range(0..empty_count);
         let mut current_index = 0;
 
         for row in 0..4 {
@@ -44,7 +44,7 @@ impl NumberPopper {
                 if position.get(row, col) == 0 {
                     if current_index == target_index {
                         // Generate a 2 or 4 based on probability
-                        let value = if self.rng.gen::<f32>() < self.four_probability {
+                        let value = if self.rng.borrow_mut().gen::<f32>() < self.four_probability {
                             4
                         } else {
                             2
@@ -61,7 +61,7 @@ impl NumberPopper {
     }
 
     /// Adds two random numbers to the board (for game initialization)
-    pub fn initialize_board(&mut self, position: &mut Position) {
+    pub fn initialize_board(&self, position: &mut Position) {
         self.pop_random_number(position);
         self.pop_random_number(position);
     }
@@ -74,7 +74,7 @@ mod tests {
     #[test]
     fn test_pop_random_number() {
         let mut position = Position::new();
-        let mut popper = NumberPopper::new();
+        let popper = NumberPopper::new();
 
         // Initially all cells are empty
         assert_eq!(position.empty_cells(), 16);
@@ -100,7 +100,7 @@ mod tests {
     #[test]
     fn test_initialize_board() {
         let mut position = Position::new();
-        let mut popper = NumberPopper::new();
+        let popper = NumberPopper::new();
 
         popper.initialize_board(&mut position);
 
@@ -124,7 +124,7 @@ mod tests {
         // Create a full board
         let grid = [[2; 4]; 4];
         let mut position = Position::with_grid(grid);
-        let mut popper = NumberPopper::new();
+        let popper = NumberPopper::new();
 
         // Should return false when trying to add to a full board
         assert!(!popper.pop_random_number(&mut position));
