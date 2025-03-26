@@ -45,12 +45,24 @@ impl Game {
     /// Starts a new game
     pub fn start_game(&mut self) -> Result<(), IllegalStateError> {
         if self.game_started {
-            return Err(IllegalStateError::new("Game already started".to_string()));
+            if self.game_over {
+                self.reset_game();
+            } else {
+                return Err(IllegalStateError::new("Game already started".to_string()));
+            }
         }
 
         self.move_maker.initialize_board(&mut self.current_position);
         self.game_started = true;
         Ok(())
+    }
+
+    /// Restarts the game
+    fn reset_game(&mut self) {
+        self.current_position = Position::new();
+        self.history = GameHistory::new();
+        self.game_started = false;
+        self.game_over = false;
     }
 
     /// Executes a move and updates the game state
@@ -63,11 +75,11 @@ impl Game {
             return Err(GameError::IllegalMove(IllegalMoveError::new(direction).game_over_reason()));
         }
 
-        // Save the old position to history
-        self.history.push(self.current_position.clone());
-
         // Make the move
         self.current_position = self.move_maker.make_move(&self.current_position, direction)?;
+
+        // Save the new position to history
+        self.history.push(self.current_position.clone());
 
         // Check if the game is over
         self.game_over = self.current_position.is_over();

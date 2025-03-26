@@ -1,54 +1,44 @@
-use log::{info, debug};
-use serde::{Deserialize, Serialize};
+use std::fs::{File, OpenOptions};
+use std::io::Write;
 
 use crate::types::Game;
 
-/// Configuration for the game logger
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GameLoggerConfig {
-    /// Whether to log detailed game information
-    pub verbose: bool,
-}
-
-impl Default for GameLoggerConfig {
-    fn default() -> Self {
-        Self {
-            verbose: false,
-        }
-    }
-}
-
-/// Handles game logging
-#[derive(Debug, Clone)]
+/// Handles game logging for training data
+#[derive(Debug)]
 pub struct GameLogger {
-    config: GameLoggerConfig,
+    file: File,
 }
 
 impl GameLogger {
-    /// Creates a new GameLogger with default configuration
-    pub fn new() -> Self {
-        Self {
-            config: GameLoggerConfig::default(),
-        }
+    /// Creates a new GameLogger with the specified output file
+    pub fn new(output_file: String) -> std::io::Result<Self> {
+        let file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(output_file)?;
+
+        Ok(Self { file })
     }
 
-    /// Creates a new GameLogger with custom configuration
-    pub fn with_config(config: GameLoggerConfig) -> Self {
-        Self {
-            config,
-        }
-    }
+    /// Logs a complete game to the output file
+    pub fn log_game(&mut self, game: &Game) -> std::io::Result<()> {
+        // Write game separator
+        writeln!(self.file, "NEW GAME")?;
 
-    /// Logs a complete game
-    pub fn log_game(&self, game: &Game) {
-        info!(
-            "Game completed. Highest tile: {}",
-            game.highest_tile()
-        );
-
-        if self.config.verbose {
-            debug!("Game history length: {}", game.history().len());
-            debug!("Final position: {:?}", game.current_position());
+        // Write each position in the game history
+        for position in game.history().positions() {
+            // Convert position to comma-separated values
+            let position_str = position
+                .grid()
+                .iter()
+                .flatten()
+                .map(|&x| x.to_string())
+                .collect::<Vec<_>>()
+                .join(",");
+            
+            writeln!(self.file, "{}", position_str)?;
         }
+
+        Ok(())
     }
 } 

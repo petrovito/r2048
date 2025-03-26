@@ -1,29 +1,30 @@
-use crate::game_logger::GameLogger;
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use log::{info, error};
+
 use crate::move_selector::MoveSelector;
+use crate::types::move_maker::MoveMaker;
 use crate::types::Game;
 use crate::types::GameError;
-use crate::ui::UIHandler;
-
+use crate::game_logger::GameLogger;
 /// Coordinates game execution
 pub struct GamePlayer {
     game: Game,
-    move_selector: Box<dyn MoveSelector>,
-    ui_handler: Box<dyn UIHandler>,
-    game_logger: GameLogger,
+    move_selector: Rc<dyn MoveSelector>,
+    game_logger: Rc<RefCell<GameLogger>>,
 }
 
 impl GamePlayer {
     /// Creates a new GamePlayer
     pub fn new(
-        game: Game,
-        move_selector: Box<dyn MoveSelector>,
-        ui_handler: Box<dyn UIHandler>,
-        game_logger: GameLogger,
+        move_maker: MoveMaker,
+        move_selector: Rc<dyn MoveSelector>,
+        game_logger: Rc<RefCell<GameLogger>>,
     ) -> Self {
         Self {
-            game,
+            game: Game::with_move_maker(move_maker),
             move_selector,
-            ui_handler,
             game_logger,
         }
     }
@@ -31,22 +32,22 @@ impl GamePlayer {
     /// Plays a complete game
     pub fn play_a_game(&mut self) {
         let _ = self.game.start_game();
-        self.ui_handler.show_position(self.game.current_position());
 
         while !self.game.is_over() {
             let _ = self.play_a_move();
         }
 
-        //self.ui_handler.show_game_over(self.game.highest_tile());
-        self.game_logger.log_game(&self.game);
+        if let Ok(_) = self.game_logger.borrow_mut().log_game(&self.game) {
+            info!("Game logged successfully. Score: {}", self.game.current_position().score());
+        } else {
+            error!("Failed to log game");
+        }
     }
 
     /// Plays a single move
     pub fn play_a_move(&mut self) -> Result<(), GameError> {
         let direction = self.move_selector.select_move(self.game.current_position())?;
         self.game.do_move(direction)?;
-        self.ui_handler.show_move(direction);
-        self.ui_handler.show_position(self.game.current_position());
         Ok(())
     }
 
