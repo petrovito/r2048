@@ -27,6 +27,9 @@ dev = [
     "flake8>=3.9",
 ]
 
+[project.scripts]
+train-2048 = "training.train:main"
+
 [tool.black]
 line-length = 88
 target-version = ['py38']

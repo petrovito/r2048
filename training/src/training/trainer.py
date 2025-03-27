@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 
 import torch
 import torch.nn as nn
@@ -12,6 +12,44 @@ from .models.base import BaseModel
 from .data.dataset import GameDataset
 from .utils.config import TrainingConfig
 from .utils.metrics import compute_metrics
+
+
+def collate_trajectories(batch: List[Dict[str, torch.Tensor]]) -> Dict[str, torch.Tensor]:
+    """Custom collate function for variable-length trajectories.
+    
+    Args:
+        batch: List of dictionaries containing trajectory data
+        
+    Returns:
+        Dictionary containing batched trajectory data
+    """
+    # Get maximum length in this batch
+    max_length = max(item["length"].item() for item in batch)
+    batch_size = len(batch)
+    
+    # Initialize tensors for the batch
+    states = torch.zeros((batch_size, max_length, 4, 4))
+    actions = torch.zeros((batch_size, max_length), dtype=torch.long)
+    rewards = torch.zeros((batch_size, max_length))
+    returns = torch.zeros((batch_size, max_length))
+    lengths = torch.zeros(batch_size, dtype=torch.long)
+    
+    # Fill in the tensors
+    for i, item in enumerate(batch):
+        length = item["length"].item()
+        states[i, :length] = item["states"]
+        actions[i, :length] = item["actions"]
+        rewards[i, :length] = item["rewards"]
+        returns[i, :length] = item["returns"]
+        lengths[i] = length
+    
+    return {
+        "states": states,
+        "actions": actions,
+        "rewards": rewards,
+        "returns": returns,
+        "length": lengths,
+    }
 
 
 class PolicyGradientTrainer:
@@ -151,6 +189,7 @@ class PolicyGradientTrainer:
             batch_size=self.config.batch_size,
             shuffle=True,
             num_workers=self.config.num_workers,
+            collate_fn=collate_trajectories,
         )
         
         val_loader = DataLoader(
@@ -158,6 +197,7 @@ class PolicyGradientTrainer:
             batch_size=self.config.batch_size,
             shuffle=False,
             num_workers=self.config.num_workers,
+            collate_fn=collate_trajectories,
         )
         
         best_val_reward = float("-inf")
