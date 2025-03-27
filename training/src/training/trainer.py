@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 import torch
 import torch.nn as nn
@@ -14,7 +14,7 @@ from .utils.config import TrainingConfig
 from .utils.metrics import compute_metrics
 
 
-class Trainer:
+class PolicyGradientTrainer:
     def __init__(
         self,
         model: BaseModel,
@@ -32,20 +32,10 @@ class Trainer:
             weight_decay=config.weight_decay,
         )
         
-        self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-            self.optimizer,
-            mode="min",
-            factor=0.5,
-            patience=5,
-            verbose=True,
-        )
-        
-        self.criterion = nn.CrossEntropyLoss()
-        
         # Initialize wandb if enabled
         if config.use_wandb:
             wandb.init(
-                project="2048-cnn",
+                project="2048-policy-gradient",
                 config=config.to_dict(),
             )
     
@@ -56,34 +46,50 @@ class Trainer:
     ) -> Dict[str, float]:
         self.model.train()
         total_loss = 0
-        total_correct = 0
-        total_samples = 0
+        total_reward = 0
+        num_trajectories = 0
         
         progress_bar = tqdm(train_loader, desc=f"Epoch {epoch}")
-        for batch_idx, (data, target) in enumerate(progress_bar):
-            data, target = data.to(self.device), target.to(self.device)
+        for batch in progress_bar:
+            states = batch["states"].to(self.device)
+            actions = batch["actions"].to(self.device)
+            returns = batch["returns"].to(self.device)
+            lengths = batch["length"]
             
-            self.optimizer.zero_grad()
-            output = self.model(data)
-            loss = self.criterion(output, target)
-            
-            loss.backward()
-            self.optimizer.step()
-            
-            total_loss += loss.item()
-            pred = output.argmax(dim=1)
-            total_correct += pred.eq(target.argmax(dim=1)).sum().item()
-            total_samples += target.size(0)
+            # Process each trajectory in the batch
+            for i in range(len(lengths)):
+                traj_states = states[i, :lengths[i]]
+                traj_actions = actions[i, :lengths[i]]
+                traj_returns = returns[i, :lengths[i]]
+                
+                # Get action probabilities
+                action_probs = self.model(traj_states)
+                
+                # Calculate policy loss (negative log probability of taken actions)
+                log_probs = torch.log(action_probs + 1e-10)
+                selected_log_probs = log_probs[range(lengths[i]), traj_actions]
+                
+                # Calculate policy gradient loss
+                loss = -torch.mean(selected_log_probs * traj_returns)
+                
+                # Backward pass
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
+                
+                total_loss += loss.item()
+                total_reward += traj_returns[0].item()  # Use first return as trajectory reward
+                num_trajectories += 1
             
             # Update progress bar
             progress_bar.set_postfix({
-                "loss": total_loss / (batch_idx + 1),
-                "acc": total_correct / total_samples,
+                "loss": total_loss / num_trajectories,
+                "reward": total_reward / num_trajectories,
             })
         
         metrics = {
-            "train_loss": total_loss / len(train_loader),
-            "train_acc": total_correct / total_samples,
+            "train_loss": total_loss / num_trajectories,
+            "train_reward": total_reward / num_trajectories,
         }
         
         if self.config.use_wandb:
@@ -97,23 +103,37 @@ class Trainer:
     ) -> Dict[str, float]:
         self.model.eval()
         total_loss = 0
-        total_correct = 0
-        total_samples = 0
+        total_reward = 0
+        num_trajectories = 0
         
         with torch.no_grad():
-            for data, target in val_loader:
-                data, target = data.to(self.device), target.to(self.device)
-                output = self.model(data)
-                loss = self.criterion(output, target)
+            for batch in val_loader:
+                states = batch["states"].to(self.device)
+                actions = batch["actions"].to(self.device)
+                returns = batch["returns"].to(self.device)
+                lengths = batch["length"]
                 
-                total_loss += loss.item()
-                pred = output.argmax(dim=1)
-                total_correct += pred.eq(target.argmax(dim=1)).sum().item()
-                total_samples += target.size(0)
+                # Process each trajectory in the batch
+                for i in range(len(lengths)):
+                    traj_states = states[i, :lengths[i]]
+                    traj_actions = actions[i, :lengths[i]]
+                    traj_returns = returns[i, :lengths[i]]
+                    
+                    # Get action probabilities
+                    action_probs = self.model(traj_states)
+                    
+                    # Calculate policy loss
+                    log_probs = torch.log(action_probs + 1e-10)
+                    selected_log_probs = log_probs[range(lengths[i]), traj_actions]
+                    loss = -torch.mean(selected_log_probs * traj_returns)
+                    
+                    total_loss += loss.item()
+                    total_reward += traj_returns[0].item()
+                    num_trajectories += 1
         
         metrics = {
-            "val_loss": total_loss / len(val_loader),
-            "val_acc": total_correct / total_samples,
+            "val_loss": total_loss / num_trajectories,
+            "val_reward": total_reward / num_trajectories,
         }
         
         if self.config.use_wandb:
@@ -140,12 +160,12 @@ class Trainer:
             num_workers=self.config.num_workers,
         )
         
-        best_val_loss = float("inf")
+        best_val_reward = float("-inf")
         history = {
             "train_loss": [],
-            "train_acc": [],
+            "train_reward": [],
             "val_loss": [],
-            "val_acc": [],
+            "val_reward": [],
         }
         
         for epoch in range(self.config.num_epochs):
@@ -155,12 +175,9 @@ class Trainer:
             # Validate
             val_metrics = self.validate(val_loader)
             
-            # Update learning rate
-            self.scheduler.step(val_metrics["val_loss"])
-            
             # Save best model
-            if val_metrics["val_loss"] < best_val_loss:
-                best_val_loss = val_metrics["val_loss"]
+            if val_metrics["val_reward"] > best_val_reward:
+                best_val_reward = val_metrics["val_reward"]
                 self.save_model(self.config.model_save_path)
             
             # Update history
