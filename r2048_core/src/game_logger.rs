@@ -25,19 +25,19 @@ impl GameLogger {
         // Write game separator
         writeln!(self.file, "NEW GAME")?;
 
-        // Write each position in the game history
-        for position in game.history().positions() {
-            // Convert position to comma-separated values
-            let position_str = position
+        // Write each step in the game history
+        writeln!(self.file, "{}", game.history().steps().iter().map(|step| {
+            let position_str = step
+                .position()
                 .grid()
                 .iter()
                 .flatten()
                 .map(|&x| x.to_string())
                 .collect::<Vec<_>>()
                 .join(",");
-            
-            writeln!(self.file, "{}", position_str)?;
-        }
+
+            format!("{} {}", position_str, step.direction())
+        }).collect::<Vec<_>>().join("\n"))?;
 
         Ok(())
     }

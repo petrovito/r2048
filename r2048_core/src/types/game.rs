@@ -75,11 +75,12 @@ impl Game {
             return Err(GameError::IllegalMove(IllegalMoveError::new(direction).game_over_reason()));
         }
 
+        // Save the new old position and direction to history
+        self.history.push(self.current_position.clone(), direction);
+
         // Make the move
         self.current_position = self.move_maker.make_move(&self.current_position, direction)?;
 
-        // Save the new position to history
-        self.history.push(self.current_position.clone());
 
         // Check if the game is over
         self.game_over = self.current_position.is_over();

@@ -1,3 +1,5 @@
+use std::fmt::{self, Display};
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -18,4 +20,17 @@ impl MoveDirection {
         ]
     }
 }
+
+impl Display for MoveDirection {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", match self {
+            MoveDirection::Up => "U",
+            MoveDirection::Down => "D",
+            MoveDirection::Left => "L",
+            MoveDirection::Right => "R",
+        })
+    }
+}
+
+
 
