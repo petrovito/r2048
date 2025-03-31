@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Optional, Dict, Any, List
 
 import torch
 import torch.nn as nn
@@ -10,46 +10,10 @@ import wandb
 
 from .models.base import BaseModel
 from .data.dataset import GameDataset
+from .data.batch_sampler import TrajectoryBatchSampler, collate_trajectories
+from .data.trajectory import Trajectory
 from .utils.config import TrainingConfig
 from .utils.metrics import compute_metrics
-
-
-def collate_trajectories(batch: List[Dict[str, torch.Tensor]]) -> Dict[str, torch.Tensor]:
-    """Custom collate function for variable-length trajectories.
-    
-    Args:
-        batch: List of dictionaries containing trajectory data
-        
-    Returns:
-        Dictionary containing batched trajectory data
-    """
-    # Get maximum length in this batch
-    max_length = max(item["length"].item() for item in batch)
-    batch_size = len(batch)
-    
-    # Initialize tensors for the batch
-    states = torch.zeros((batch_size, max_length, 4, 4))
-    actions = torch.zeros((batch_size, max_length), dtype=torch.long)
-    rewards = torch.zeros((batch_size, max_length))
-    returns = torch.zeros((batch_size, max_length))
-    lengths = torch.zeros(batch_size, dtype=torch.long)
-    
-    # Fill in the tensors
-    for i, item in enumerate(batch):
-        length = item["length"].item()
-        states[i, :length] = item["states"]
-        actions[i, :length] = item["actions"]
-        rewards[i, :length] = item["rewards"]
-        returns[i, :length] = item["returns"]
-        lengths[i] = length
-    
-    return {
-        "states": states,
-        "actions": actions,
-        "rewards": rewards,
-        "returns": returns,
-        "length": lengths,
-    }
 
 
 class PolicyGradientTrainer:
@@ -84,31 +48,26 @@ class PolicyGradientTrainer:
     ) -> Dict[str, float]:
         self.model.train()
         total_loss = 0
-        total_reward = 0
+        total_length = 0
         num_trajectories = 0
         
         progress_bar = tqdm(train_loader, desc=f"Epoch {epoch}")
         for batch in progress_bar:
-            states = batch["states"].to(self.device)
-            actions = batch["actions"].to(self.device)
-            returns = batch["returns"].to(self.device)
-            lengths = batch["length"]
-            
             # Process each trajectory in the batch
-            for i in range(len(lengths)):
-                traj_states = states[i, :lengths[i]]
-                traj_actions = actions[i, :lengths[i]]
-                traj_returns = returns[i, :lengths[i]]
+            for trajectory in batch:
+                states = trajectory.states.to(self.device)
+                actions = trajectory.actions.to(self.device)
+                length = trajectory.length
                 
                 # Get action probabilities
-                action_probs = self.model(traj_states)
+                action_probs = self.model(states)
                 
                 # Calculate policy loss (negative log probability of taken actions)
                 log_probs = torch.log(action_probs + 1e-10)
-                selected_log_probs = log_probs[range(lengths[i]), traj_actions]
+                selected_log_probs = log_probs[range(length), actions]
                 
-                # Calculate policy gradient loss
-                loss = -torch.mean(selected_log_probs * traj_returns)
+                # Calculate policy gradient loss using trajectory length as reward
+                loss = -torch.mean(selected_log_probs * length)
                 
                 # Backward pass
                 self.optimizer.zero_grad()
@@ -116,18 +75,18 @@ class PolicyGradientTrainer:
                 self.optimizer.step()
                 
                 total_loss += loss.item()
-                total_reward += traj_returns[0].item()  # Use first return as trajectory reward
+                total_length += length
                 num_trajectories += 1
             
             # Update progress bar
             progress_bar.set_postfix({
                 "loss": total_loss / num_trajectories,
-                "reward": total_reward / num_trajectories,
+                "avg_length": total_length / num_trajectories,
             })
         
         metrics = {
             "train_loss": total_loss / num_trajectories,
-            "train_reward": total_reward / num_trajectories,
+            "train_avg_length": total_length / num_trajectories,
         }
         
         if self.config.use_wandb:
@@ -141,37 +100,31 @@ class PolicyGradientTrainer:
     ) -> Dict[str, float]:
         self.model.eval()
         total_loss = 0
-        total_reward = 0
+        total_length = 0
         num_trajectories = 0
         
         with torch.no_grad():
             for batch in val_loader:
-                states = batch["states"].to(self.device)
-                actions = batch["actions"].to(self.device)
-                returns = batch["returns"].to(self.device)
-                lengths = batch["length"]
-                
-                # Process each trajectory in the batch
-                for i in range(len(lengths)):
-                    traj_states = states[i, :lengths[i]]
-                    traj_actions = actions[i, :lengths[i]]
-                    traj_returns = returns[i, :lengths[i]]
+                for trajectory in batch:
+                    states = trajectory.states.to(self.device)
+                    actions = trajectory.actions.to(self.device)
+                    length = trajectory.length.item()
                     
                     # Get action probabilities
-                    action_probs = self.model(traj_states)
+                    action_probs = self.model(states)
                     
                     # Calculate policy loss
                     log_probs = torch.log(action_probs + 1e-10)
-                    selected_log_probs = log_probs[range(lengths[i]), traj_actions]
-                    loss = -torch.mean(selected_log_probs * traj_returns)
+                    selected_log_probs = log_probs[range(length), actions]
+                    loss = -torch.mean(selected_log_probs * length)
                     
                     total_loss += loss.item()
-                    total_reward += traj_returns[0].item()
+                    total_length += length
                     num_trajectories += 1
         
         metrics = {
             "val_loss": total_loss / num_trajectories,
-            "val_reward": total_reward / num_trajectories,
+            "val_avg_length": total_length / num_trajectories,
         }
         
         if self.config.use_wandb:
@@ -184,10 +137,12 @@ class PolicyGradientTrainer:
         train_dataset: GameDataset,
         val_dataset: GameDataset,
     ) -> Dict[str, Any]:
+        # Calculate max samples per batch based on batch_size
+        max_samples_per_batch = self.config.batch_size * 4 * 4  # Assuming 4x4 grid
+        
         train_loader = DataLoader(
             train_dataset,
-            batch_size=self.config.batch_size,
-            shuffle=True,
+            batch_sampler=TrajectoryBatchSampler(train_dataset, max_samples_per_batch),
             num_workers=self.config.num_workers,
             collate_fn=collate_trajectories,
         )
@@ -200,12 +155,12 @@ class PolicyGradientTrainer:
             collate_fn=collate_trajectories,
         )
         
-        best_val_reward = float("-inf")
+        best_val_length = float("-inf")
         history = {
             "train_loss": [],
-            "train_reward": [],
+            "train_avg_length": [],
             "val_loss": [],
-            "val_reward": [],
+            "val_avg_length": [],
         }
         
         for epoch in range(self.config.num_epochs):
@@ -216,8 +171,8 @@ class PolicyGradientTrainer:
             val_metrics = self.validate(val_loader)
             
             # Save best model
-            if val_metrics["val_reward"] > best_val_reward:
-                best_val_reward = val_metrics["val_reward"]
+            if val_metrics["val_avg_length"] > best_val_length:
+                best_val_length = val_metrics["val_avg_length"]
                 self.save_model(self.config.model_save_path)
             
             # Update history

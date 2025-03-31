@@ -1,9 +1,11 @@
 from pathlib import Path
-from typing import Optional, Tuple, Dict, Any
+from typing import Optional, Dict, Any
 
 import numpy as np
 import torch
 from torch.utils.data import Dataset
+
+from .trajectory import Trajectory
 
 
 class GameDataset(Dataset):
@@ -27,22 +29,7 @@ class GameDataset(Dataset):
         self.data = np.load(data_path)
         self.states = self.data["states"]  # Shape: (num_trajectories, max_steps, 4, 4)
         self.actions = self.data["actions"]  # Shape: (num_trajectories, max_steps)
-        self.rewards = self.data["rewards"]  # Shape: (num_trajectories, max_steps)
         self.trajectory_lengths = self.data["trajectory_lengths"]  # Shape: (num_trajectories,)
-        
-        # Calculate returns for each trajectory
-        self.returns = self._calculate_returns()
-    
-    def _calculate_returns(self) -> np.ndarray:
-        """Calculate the returns (sum of rewards) for each trajectory."""
-        returns = np.zeros_like(self.rewards)
-        for i in range(len(self.trajectory_lengths)):
-            length = self.trajectory_lengths[i]
-            # Calculate returns with discounting (gamma = 0.99)
-            returns[i, length-1] = self.rewards[i, length-1]
-            for t in range(length-2, -1, -1):
-                returns[i, t] = self.rewards[i, t] + 0.99 * returns[i, t+1]
-        return returns
     
     def __len__(self) -> int:
         return len(self.states)
@@ -60,16 +47,12 @@ class GameDataset(Dataset):
             Dictionary containing:
                 - states: Tensor of shape (trajectory_length, 4, 4)
                 - actions: Tensor of shape (trajectory_length,)
-                - rewards: Tensor of shape (trajectory_length,)
-                - returns: Tensor of shape (trajectory_length,)
                 - length: Scalar tensor with trajectory length
         """
         length = self.trajectory_lengths[idx]
         
         states = torch.from_numpy(self.states[idx, :length]).float()
         actions = torch.from_numpy(self.actions[idx, :length]).long()
-        rewards = torch.from_numpy(self.rewards[idx, :length]).float()
-        returns = torch.from_numpy(self.returns[idx, :length]).float()
         
         if self.transform:
             states = self.transform(states)
@@ -77,8 +60,6 @@ class GameDataset(Dataset):
         return {
             "states": states,
             "actions": actions,
-            "rewards": rewards,
-            "returns": returns,
             "length": torch.tensor(length),
         }
     
@@ -86,7 +67,6 @@ class GameDataset(Dataset):
     def create_from_trajectories(
         states: np.ndarray,
         actions: np.ndarray,
-        rewards: np.ndarray,
         trajectory_lengths: np.ndarray,
         save_path: Path,
     ) -> None:
@@ -95,7 +75,6 @@ class GameDataset(Dataset):
         Args:
             states: Array of game states (num_trajectories, max_steps, 4, 4)
             actions: Array of actions (num_trajectories, max_steps)
-            rewards: Array of rewards (num_trajectories, max_steps)
             trajectory_lengths: Array of trajectory lengths (num_trajectories,)
             save_path: Path to save the dataset
         """
@@ -104,6 +83,5 @@ class GameDataset(Dataset):
             save_path,
             states=states,
             actions=actions,
-            rewards=rewards,
             trajectory_lengths=trajectory_lengths,
         ) 
