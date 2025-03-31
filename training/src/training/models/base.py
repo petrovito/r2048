@@ -34,4 +34,13 @@ class BaseModel(nn.Module, ABC):
         Returns:
             Tuple of (batch_size, num_classes)
         """
+        pass
+
+    @abstractmethod
+    def tensor_map(self) -> dict[str, torch.Tensor]:
+        """Get a mapping of all model parameters to their names.
+        
+        Returns:
+            Dictionary mapping parameter names to their tensors
+        """
         pass 

@@ -43,7 +43,12 @@ class GameDataLoader:
             states.append(state)
             actions.append(action_idx)
         
-        return torch.tensor(states), torch.tensor(actions), torch.tensor(len(states))
+        # Convert to tensors with correct dtypes
+        states_tensor = torch.tensor(states, dtype=torch.float32)
+        actions_tensor = torch.tensor(actions, dtype=torch.long)
+        length_tensor = torch.tensor(len(states), dtype=torch.long)
+        
+        return states_tensor, actions_tensor, length_tensor
 
 
         

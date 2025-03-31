@@ -6,7 +6,6 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-import wandb
 
 from .models.base import BaseModel
 from .data.dataset import GameDataset
@@ -33,13 +32,6 @@ class PolicyGradientTrainer:
             lr=config.learning_rate,
             weight_decay=config.weight_decay,
         )
-        
-        # Initialize wandb if enabled
-        if config.use_wandb:
-            wandb.init(
-                project="2048-policy-gradient",
-                config=config.to_dict(),
-            )
     
     def train_epoch(
         self,
@@ -89,9 +81,6 @@ class PolicyGradientTrainer:
             "train_avg_length": total_length / num_trajectories,
         }
         
-        if self.config.use_wandb:
-            wandb.log(metrics)
-        
         return metrics
     
     def validate(
@@ -126,9 +115,6 @@ class PolicyGradientTrainer:
             "val_loss": total_loss / num_trajectories,
             "val_avg_length": total_length / num_trajectories,
         }
-        
-        if self.config.use_wandb:
-            wandb.log(metrics)
         
         return metrics
     

@@ -2,6 +2,7 @@ r2048_core/game_data/
 r2048_core/target/
 
 tiny_cnn/target/
+tiny_cnn/models/
 
 training/.venv/
 training/data/
