@@ -1,11 +1,7 @@
-from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Dict, Any, List, Tuple
 
-import numpy as np
 import torch
 from torch.utils.data import Dataset
-
-from .trajectory import Trajectory
 
 
 class GameDataset(Dataset):
@@ -13,26 +9,20 @@ class GameDataset(Dataset):
     
     def __init__(
         self,
-        data_path: Path,
-        transform: Optional[callable] = None,
+        trajectories: List[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]],
+        transform: callable = None,
     ):
         """Initialize the dataset.
         
         Args:
-            data_path: Path to the data file containing trajectories
+            trajectories: List of tuples containing (states, actions, lengths)
             transform: Optional transform to apply to the data
         """
-        self.data_path = data_path
+        self.trajectories = trajectories
         self.transform = transform
-        
-        # Load trajectory data
-        self.data = np.load(data_path)
-        self.states = self.data["states"]  # Shape: (num_trajectories, max_steps, 4, 4)
-        self.actions = self.data["actions"]  # Shape: (num_trajectories, max_steps)
-        self.trajectory_lengths = self.data["trajectory_lengths"]  # Shape: (num_trajectories,)
     
     def __len__(self) -> int:
-        return len(self.states)
+        return len(self.trajectories)
     
     def __getitem__(
         self,
@@ -49,10 +39,7 @@ class GameDataset(Dataset):
                 - actions: Tensor of shape (trajectory_length,)
                 - length: Scalar tensor with trajectory length
         """
-        length = self.trajectory_lengths[idx]
-        
-        states = torch.from_numpy(self.states[idx, :length]).float()
-        actions = torch.from_numpy(self.actions[idx, :length]).long()
+        states, actions, length = self.trajectories[idx]
         
         if self.transform:
             states = self.transform(states)
@@ -60,28 +47,6 @@ class GameDataset(Dataset):
         return {
             "states": states,
             "actions": actions,
-            "length": torch.tensor(length),
+            "length": length,
         }
     
-    @staticmethod
-    def create_from_trajectories(
-        states: np.ndarray,
-        actions: np.ndarray,
-        trajectory_lengths: np.ndarray,
-        save_path: Path,
-    ) -> None:
-        """Create a dataset from trajectory data and save it.
-        
-        Args:
-            states: Array of game states (num_trajectories, max_steps, 4, 4)
-            actions: Array of actions (num_trajectories, max_steps)
-            trajectory_lengths: Array of trajectory lengths (num_trajectories,)
-            save_path: Path to save the dataset
-        """
-        save_path.parent.mkdir(parents=True, exist_ok=True)
-        np.savez(
-            save_path,
-            states=states,
-            actions=actions,
-            trajectory_lengths=trajectory_lengths,
-        ) 

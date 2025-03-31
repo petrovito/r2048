@@ -138,7 +138,6 @@ def main():
     # Initialize components
     data_loader = GameDataLoader(
         log_path=args.log_path,
-        save_path=args.save_dir / "processed_data.npz",
         train_val_split=config.train_val_split,
         seed=args.seed
     )
