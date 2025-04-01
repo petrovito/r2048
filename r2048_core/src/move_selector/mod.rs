@@ -1,6 +1,7 @@
 pub mod random;
 pub mod mcts;
 pub mod tools;
+pub mod policy_selector;
 
 use crate::types::{MoveDirection, Position, GameError};
 use crate::types::move_maker::MoveMaker;
@@ -14,4 +15,5 @@ pub trait MoveSelector {
 }
 
 pub use random::RandomSelector;
-pub use mcts::MCTSSelector; 
+pub use mcts::MCTSSelector;
+pub use policy_selector::PolicySelector; 
