@@ -1,123 +1,90 @@
-use ndarray::{Array4, Array2, ArrayView4, ArrayView2};
+use ndarray::{Array4, Array2, Array3, Array1};
+use crate::layers::{Layer, Conv2dLayer, PaddedConv2dLayer, ReLULayer, DenseLayer, SoftmaxLayer};
+
 pub struct PolicyModel {
-    // Model parameters
-    conv1_weight: Array4<f32>,
-    conv1_bias: Array2<f32>,
-    conv2_weight: Array4<f32>,
-    conv2_bias: Array2<f32>,
-    fc1_weight: Array2<f32>,
-    fc1_bias: Array2<f32>,
-    fc2_weight: Array2<f32>,
-    fc2_bias: Array2<f32>,
+    // Layers
+    conv1: PaddedConv2dLayer,
+    relu1: ReLULayer,
+    conv2: PaddedConv2dLayer,
+    relu2: ReLULayer,
+    fc1: DenseLayer,
+    relu3: ReLULayer,
+    fc2: DenseLayer,
+    softmax: SoftmaxLayer,
+
+    // Input/output buffers
+    input: Array3<f32>,  // (1, 4, 4) for the game board
+    conv1_output: Array3<f32>,  // (32, 4, 4)
+    conv2_output: Array3<f32>,  // (64, 4, 4)
+    fc1_input: Array1<f32>,     // (1024) flattened conv2 output
+    fc1_output: Array1<f32>,    // (256)
+    fc2_output: Array1<f32>,    // (128)
+    output: Array1<f32>,        // (4) for the action probabilities
 }
 
 impl PolicyModel {
-    pub fn new() -> Self {
-        // Initialize with zeros for now, will be loaded from npz
-        Self {
-            conv1_weight: Array4::zeros((4, 1, 3, 3)),  // (out_channels, in_channels, kernel_size, kernel_size)
-            conv1_bias: Array2::zeros((4, 1)),
-            conv2_weight: Array4::zeros((16, 4, 3, 3)),
-            conv2_bias: Array2::zeros((16, 1)),
-            fc1_weight: Array2::zeros((32, 64)),  // 64 = 16 * 2 * 2 (channels * height * width)
-            fc1_bias: Array2::zeros((32, 1)),
-            fc2_weight: Array2::zeros((4, 32)),
-            fc2_bias: Array2::zeros((4, 1)),
-        }
-    }
-
-    pub fn from_arrays(
+    pub fn new(
         conv1_weight: Array4<f32>,
-        conv1_bias: Array2<f32>,
+        conv1_bias: Array1<f32>,
         conv2_weight: Array4<f32>,
-        conv2_bias: Array2<f32>,
+        conv2_bias: Array1<f32>,
         fc1_weight: Array2<f32>,
-        fc1_bias: Array2<f32>,
+        fc1_bias: Array1<f32>,
         fc2_weight: Array2<f32>,
-        fc2_bias: Array2<f32>,
+        fc2_bias: Array1<f32>,
     ) -> Self {
+        // Create layers
+        let conv1 = PaddedConv2dLayer::new(32, 1, 4, 4, 3, conv1_weight, conv1_bias);
+        let relu1 = ReLULayer::new(32 * 4 * 4);
+        let conv2 = PaddedConv2dLayer::new(64, 32, 4, 4, 3, conv2_weight, conv2_bias);
+        let relu2 = ReLULayer::new(64 * 4 * 4);
+        let fc1 = DenseLayer::new(256, 1024, fc1_weight, fc1_bias);
+        let relu3 = ReLULayer::new(256);
+        let fc2 = DenseLayer::new(128, 256, fc2_weight, fc2_bias);
+        let softmax = SoftmaxLayer::new(4);
+
+        // Initialize buffers
+        let input = Array3::zeros((1, 4, 4));
+        let conv1_output = Array3::zeros((32, 4, 4));
+        let conv2_output = Array3::zeros((64, 4, 4));
+        let fc1_input = Array1::zeros(1024);
+        let fc1_output = Array1::zeros(256);
+        let fc2_output = Array1::zeros(128);
+        let output = Array1::zeros(4);
+
         Self {
-            conv1_weight,
-            conv1_bias,
-            conv2_weight,
-            conv2_bias,
-            fc1_weight,
-            fc1_bias,
-            fc2_weight,
-            fc2_bias,
+            conv1, relu1, conv2, relu2, fc1, relu3, fc2, softmax,
+            input, conv1_output, conv2_output, fc1_input, fc1_output, fc2_output, output,
         }
     }
-    pub fn forward(&self, x: ArrayView4<f32>) -> Array2<f32> {
-        // First conv block
-        let x = self.conv2d(x, &self.conv1_weight, &self.conv1_bias);
-        let x = self.relu_4d(x);
 
-        // Second conv block
-        let x = self.conv2d(x.view(), &self.conv2_weight, &self.conv2_bias);
-        let x = self.relu_4d(x);
+    pub fn inference(&mut self, board: &Array3<f32>) -> &Array1<f32> {
+        // Copy input board to our buffer
+        self.input.assign(board);
 
-        // Flatten
-        let x = x.into_shape([10, 10]).unwrap();//TODO
-
-        // Fully connected layers
-        let x = self.linear(x, &self.fc1_weight, &self.fc1_bias);
-        let x = self.relu_2d(x);
-        //let x = self.dropout(x, 0.5);
-        let x = self.linear(x, &self.fc2_weight, &self.fc2_bias);
-
-        // Softmax
-        self.softmax(x)
-    }
-
-    fn conv2d(&self, x: ArrayView4<f32>, weight: &Array4<f32>, bias: &Array2<f32>) -> Array4<f32> {
-        // Simple 2D convolution implementation
-        let (batch_size, in_channels, height, width) = x.dim();
-        let (out_channels, _, kernel_size, _) = weight.dim();
-        let output_height = height - kernel_size + 1;
-        let output_width = width - kernel_size + 1;
+        // Forward pass through the network
+        self.conv1.forward(&self.input, &mut self.conv1_output);
         
-        let mut output = Array4::zeros((batch_size, out_channels, output_height, output_width));
+        // Reshape conv1_output to 1D and apply ReLU
+        self.fc1_input.assign(&Array1::from_vec(self.conv1_output.iter().copied().collect()));
+        self.relu1.activate(&mut self.fc1_input);
         
-        for b in 0..batch_size {
-            for oc in 0..out_channels {
-                for h in 0..output_height {
-                    for w in 0..output_width {
-                        let mut sum = 0.0;
-                        for ic in 0..in_channels {
-                            for kh in 0..kernel_size {
-                                for kw in 0..kernel_size {
-                                    sum += x[[b, ic, h + kh, w + kw]] * weight[[oc, ic, kh, kw]];
-                                }
-                            }
-                        }
-                        output[[b, oc, h, w]] = sum + bias[[oc, 0]];
-                    }
-                }
-            }
-        }
-        output
-    }
+        self.conv2.forward(&self.conv1_output, &mut self.conv2_output);
+        
+        // Reshape conv2_output to 1D and apply ReLU
+        self.fc1_input.assign(&Array1::from_vec(self.conv2_output.iter().copied().collect()));
+        self.relu2.activate(&mut self.fc1_input);
+        
+        self.fc1.forward(&self.fc1_input, &mut self.fc1_output);
+        self.relu3.activate(&mut self.fc1_output);
+        
+        self.fc2.forward(&self.fc1_output, &mut self.fc2_output);
+        self.relu3.activate(&mut self.fc2_output);
+        
+        // Final dense layer and softmax
+        self.fc2.forward(&self.fc2_output, &mut self.output);
+        self.softmax.activate(&mut self.output);
 
-    fn linear(&self, x: Array2<f32>, weight: &Array2<f32>, bias: &Array2<f32>) -> Array2<f32> {
-        x.dot(weight) + bias.t()
+        &self.output
     }
-
-    fn relu_4d(&self, x: Array4<f32>) -> Array4<f32> {
-        x.map(|&v| v.max(0.0))
-    }
-
-    fn relu_2d(&self, x: Array2<f32>) -> Array2<f32> {
-        x.map(|&v| v.max(0.0))
-    }
-
-    fn dropout(&self, x: Array2<f32>, p: f32) -> Array2<f32> {
-        let mask = Array2::from_shape_fn(x.dim(), |_| if rand::random::<f32>() > p { 1.0 } else { 0.0 });
-        x * mask / (1.0 - p)
-    }
-
-    fn softmax(&self, x: Array2<f32>) -> Array2<f32> {
-        let exp = x.map(|&v| v.exp());
-        let sum = exp.sum_axis(ndarray::Axis(1)).insert_axis(ndarray::Axis(1));
-        exp / sum
-    }
-} 
+}

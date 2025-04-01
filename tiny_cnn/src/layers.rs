@@ -1,4 +1,4 @@
-use ndarray::{Array1, Array2, Array3, Array4};
+use ndarray::{Array1, Array2, Array3, Array4, ArrayBase, Ix1};
 
 
 pub trait Layer<Input, Output> {
@@ -13,14 +13,40 @@ impl ReLULayer {
     pub fn new(size: usize) -> Self {
         Self { size }
     }
-}
 
-impl Layer<Array1<f32>, Array1<f32>> for ReLULayer {
-    fn forward(&self, input: &Array1<f32>, output: &mut Array1<f32>) {
-        output.assign(&input.map(|x| x.max(0.0)));
+    pub fn activate(&self, array: &mut Array1<f32>) {
+        for x in array.iter_mut() {
+            *x = x.max(0.0);
+        }
     }
 }
 
+pub struct SoftmaxLayer {
+    size: usize,
+}
+
+impl SoftmaxLayer {
+    pub fn new(size: usize) -> Self {
+        Self { size }
+    }
+
+    pub fn activate(&self, array: &mut Array1<f32>) {
+        // Find max value for numerical stability
+        let max_val = array.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b));
+        
+        // Compute exp(x - max) and sum
+        let mut sum = 0.0;
+        for x in array.iter_mut() {
+            *x = (*x - max_val).exp();
+            sum += *x;
+        }
+        
+        // Normalize
+        for x in array.iter_mut() {
+            *x /= sum;
+        }
+    }
+}
 
 pub struct Conv2dLayer {
     out_channels: usize,
@@ -307,23 +333,45 @@ mod tests {
     #[test]
     fn test_relu() {
         // Create test input
-        let input = Array1::from_vec(vec![-1.0, 0.0, 2.0, -3.5, 4.2]);
-        let mut output = Array1::zeros(5);
+        let mut input = Array1::from_vec(vec![-1.0, 0.0, 2.0, -3.5, 4.2]);
         
         // Create ReLU layer
         let relu = ReLULayer::new(5);
         
-        // Forward pass
-        relu.forward(&input, &mut output);
+        // In-place activation
+        relu.activate(&mut input);
         
         // ReLU should zero out negative values and pass through positives
-        assert!((output[0] - 0.0).abs() < 1e-6);    // -1.0 -> 0.0
-        assert!((output[1] - 0.0).abs() < 1e-6);    // 0.0 -> 0.0 
-        assert!((output[2] - 2.0).abs() < 1e-6);    // 2.0 -> 2.0
-        assert!((output[3] - 0.0).abs() < 1e-6);    // -3.5 -> 0.0
-        assert!((output[4] - 4.2).abs() < 1e-6);    // 4.2 -> 4.2
+        assert!((input[0] - 0.0).abs() < 1e-6);    // -1.0 -> 0.0
+        assert!((input[1] - 0.0).abs() < 1e-6);    // 0.0 -> 0.0 
+        assert!((input[2] - 2.0).abs() < 1e-6);    // 2.0 -> 2.0
+        assert!((input[3] - 0.0).abs() < 1e-6);    // -3.5 -> 0.0
+        assert!((input[4] - 4.2).abs() < 1e-6);    // 4.2 -> 4.2
     }
 
-
-
+    #[test]
+    fn test_softmax() {
+        // Create test input
+        let mut input = Array1::from_vec(vec![1.0, 2.0, 3.0, 4.0]);
+        
+        // Create Softmax layer
+        let softmax = SoftmaxLayer::new(4);
+        
+        // In-place activation
+        softmax.activate(&mut input);
+        
+        // Check that all values are between 0 and 1
+        for &x in input.iter() {
+            assert!(x >= 0.0 && x <= 1.0);
+        }
+        
+        // Check that sum is 1
+        let sum: f32 = input.iter().sum();
+        assert!((sum - 1.0).abs() < 1e-6);
+        
+        // Check that larger inputs give larger probabilities
+        assert!(input[3] > input[2]);
+        assert!(input[2] > input[1]);
+        assert!(input[1] > input[0]);
+    }
 }

@@ -2,7 +2,6 @@ use std::path::Path;
 use ndarray_npy::NpzReader;
 use std::fs::File;
 use anyhow::{Result, Context};
-use ndarray::{Array4, Array2, Ix4, Ix2};
 
 use crate::model::policy_model::PolicyModel;
 
@@ -29,7 +28,7 @@ impl ModelLoader {
         let fc2_weight = npz.by_name("fc2.weight")?;
         let fc2_bias = npz.by_name("fc2.bias")?;
 
-        Ok(PolicyModel::from_arrays(
+        Ok(PolicyModel::new(
             conv1_weight, conv1_bias, conv2_weight, conv2_bias, fc1_weight, fc1_bias, fc2_weight, fc2_bias))
     }
 }
@@ -37,16 +36,16 @@ impl ModelLoader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ndarray::Array4;
+    use ndarray::Array3;
 
     #[test]
     fn test_load_model() {
         let mut loader = ModelLoader::new();
-        let model = loader.load_from_npz("proto.npz").unwrap();
+        let mut model = loader.load_from_npz("models/proto.npz").unwrap();
 
         // Test forward pass with a dummy input
-        let input = Array4::zeros((1, 1, 4, 4));
-        let output = model.forward(input.view());
+        let input = Array3::zeros((1, 4, 4));
+        let output = model.inference(&input);
         assert_eq!(output.shape(), &[1, 4]);  // batch_size=1, num_actions=4
     }
 } 
