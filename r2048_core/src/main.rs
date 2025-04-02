@@ -1,6 +1,7 @@
 use clap::Parser;
 use env_logger::Env;
 use log::info;
+use std::path::PathBuf;
 
 use r2048_core::environment::{Environment, EnvSpecs};
 
@@ -15,9 +16,13 @@ struct Args {
     #[arg(short, long, default_value = "game_data/game_logs.txt")]
     log_path: String,
 
-    /// Type of move selector (e.g., random)
+    /// Type of move selector (e.g., random, policy)
     #[arg(short, long, default_value = "random")]
     selector: String,
+
+    /// Path to the policy model (required if selector is 'policy')
+    #[arg(short, long)]
+    model_path: Option<PathBuf>,
 
     /// Type of UI handler (e.g., console, noop)
     #[arg(short, long, default_value = "console")]
@@ -30,10 +35,16 @@ fn main() {
 
     let args = Args::parse();
 
+    // Validate that model path is provided when using policy selector
+    if args.selector == "policy" && args.model_path.is_none() {
+        panic!("Model path must be provided when using policy selector");
+    }
+
     let specs = EnvSpecs {
         game_count: args.games,
         game_logs_path: args.log_path,
         selector_type: args.selector,
+        policy_model_path: args.model_path,
         ui_type: args.ui,
     };
 

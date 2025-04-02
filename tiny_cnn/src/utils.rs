@@ -5,12 +5,12 @@ use crate::model::policy_model::PolicyModel;
 /// Returns a probability distribution over 4 moves
 pub fn run_inference(board: &[f32; 16], model: &mut PolicyModel) -> [f32; 4] {
     // Reshape the input into a 4x4x1 array and preprocess
-    let mut input = Array3::zeros((4, 4, 1));
+    let mut input = Array3::zeros((1, 4, 4));
     for i in 0..4 {
         for j in 0..4 {
             let value = board[i * 4 + j];
             // Only take log2 of nonzero values
-            input[[i, j, 0]] = if value > 0.0 {
+            input[[0, i, j]] = if value > 0.0 {
                 value.log2()
             } else {
                 0.0

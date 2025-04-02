@@ -1,11 +1,13 @@
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
 use crate::game_logger::GameLogger;
 use crate::game_play::GamePlayer;
-use crate::move_selector::{MoveSelector, RandomSelector};
+use crate::move_selector::{MoveSelector, RandomSelector, PolicySelector};
+use crate::move_selector::tools::policy::NNPolicyProvider;
 use crate::types::MoveMaker;
 use crate::ui::{ConsoleUI, NoopUI, UIHandler};
 
@@ -14,6 +16,8 @@ use crate::ui::{ConsoleUI, NoopUI, UIHandler};
 pub struct EnvSpecs {
     /// The type of move selector to use
     pub selector_type: String,
+    /// The path to the policy model (if using policy selector)
+    pub policy_model_path: Option<PathBuf>,
     /// The type of UI handler to use
     pub ui_type: String,
     /// The number of games to play
@@ -26,6 +30,7 @@ impl Default for EnvSpecs {
     fn default() -> Self {
         Self {
             selector_type: "random".to_string(),
+            policy_model_path: None,
             ui_type: "console".to_string(),
             game_count: 1,
             game_logs_path: "training/data/game_logs.txt".to_string(),
@@ -73,7 +78,17 @@ impl Environment {
     fn create_move_selector(specs: &EnvSpecs) -> Rc<dyn MoveSelector> {
         match specs.selector_type.as_str() {
             "random" => Rc::new(RandomSelector::new()),
-            // Add other selectors here
+            "policy" => {
+                let model_path = specs.policy_model_path.as_ref()
+                    .expect("Policy model path must be provided for policy selector");
+                
+                // Create the NN policy provider
+                let policy_provider = NNPolicyProvider::new(model_path)
+                    .expect("Failed to create NN policy provider");
+                
+                // Create the policy selector with the provider
+                Rc::new(PolicySelector::new(policy_provider))
+            }
             _ => Rc::new(RandomSelector::new()),
         }
     }
