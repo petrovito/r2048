@@ -31,7 +31,14 @@ class GameDataLoader:
         self.val_dataset = None
 
     def _parse_single_trajectory(self, lines: List[str]) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Parse a single trajectory from a list of lines."""
+        """Parse a single trajectory from a list of lines.
+        
+        The direction mapping matches the Rust implementation:
+        Up (U) -> 0
+        Right (R) -> 1
+        Down (D) -> 2
+        Left (L) -> 3
+        """
         states = []
         actions = []
         for line in lines:
@@ -39,7 +46,8 @@ class GameDataLoader:
             state = np.array([float(x) for x in state_str.split(',')]).reshape(4, 4)
             # Apply log2 to nonzero elements
             state[state != 0] = np.log2(state[state != 0])
-            action_idx = {'U': 0, 'D': 1, 'L': 2, 'R': 3}[action]
+            # Map actions to indices matching Rust implementation
+            action_idx = {'U': 0, 'R': 1, 'D': 2, 'L': 3}[action]
             states.append(state)
             actions.append(action_idx)
         
