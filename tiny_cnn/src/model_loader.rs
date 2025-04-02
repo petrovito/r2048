@@ -19,14 +19,14 @@ impl ModelLoader {
         let mut npz = NpzReader::new(file)?;
 
         // Load all parameters
-        let conv1_weight = npz.by_name("conv1.weight")?;
-        let conv1_bias = npz.by_name("conv1.bias")?;
-        let conv2_weight = npz.by_name("conv2.weight")?;
-        let conv2_bias = npz.by_name("conv2.bias")?;
-        let fc1_weight = npz.by_name("fc1.weight")?;
-        let fc1_bias = npz.by_name("fc1.bias")?;
-        let fc2_weight = npz.by_name("fc2.weight")?;
-        let fc2_bias = npz.by_name("fc2.bias")?;
+        let conv1_weight = npz.by_name("conv1.weight.npy")?;
+        let conv1_bias = npz.by_name("conv1.bias.npy")?;
+        let conv2_weight = npz.by_name("conv2.weight.npy")?;
+        let conv2_bias = npz.by_name("conv2.bias.npy")?;
+        let fc1_weight = npz.by_name("fc1.weight.npy")?;
+        let fc1_bias = npz.by_name("fc1.bias.npy")?;
+        let fc2_weight = npz.by_name("fc2.weight.npy")?;
+        let fc2_bias = npz.by_name("fc2.bias.npy")?;
 
         Ok(PolicyModel::new(
             conv1_weight, conv1_bias, conv2_weight, conv2_bias, fc1_weight, fc1_bias, fc2_weight, fc2_bias))
@@ -46,6 +46,6 @@ mod tests {
         // Test forward pass with a dummy input
         let input = Array3::zeros((1, 4, 4));
         let output = model.inference(&input);
-        assert_eq!(output.shape(), &[1, 4]);  // batch_size=1, num_actions=4
+        assert_eq!(output.shape(), &[4]);  // batch_size=1, num_actions=4
     }
 } 

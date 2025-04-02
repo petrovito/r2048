@@ -2,10 +2,20 @@ use ndarray::{Array4, Array2, Array3, Array1};
 use crate::layers::{Layer, Conv2dLayer, PaddedConv2dLayer, ReLULayer, DenseLayer, SoftmaxLayer};
 
 pub struct PolicyModel {
+    // Network architecture constants
+    input_channels: usize,
+    input_height: usize,
+    input_width: usize,
+    num_actions: usize,
+    conv1_channels: usize,
+    conv2_channels: usize,
+    conv2_padding: usize,
+    fc1_channels: usize,
+
     // Layers
     conv1: PaddedConv2dLayer,
     relu1: ReLULayer,
-    conv2: PaddedConv2dLayer,
+    conv2: Conv2dLayer,
     relu2: ReLULayer,
     fc1: DenseLayer,
     relu3: ReLULayer,
@@ -14,12 +24,11 @@ pub struct PolicyModel {
 
     // Input/output buffers
     input: Array3<f32>,  // (1, 4, 4) for the game board
-    conv1_output: Array3<f32>,  // (32, 4, 4)
-    conv2_output: Array3<f32>,  // (64, 4, 4)
-    fc1_input: Array1<f32>,     // (1024) flattened conv2 output
-    fc1_output: Array1<f32>,    // (256)
-    fc2_output: Array1<f32>,    // (128)
-    output: Array1<f32>,        // (4) for the action probabilities
+    conv1_output: Array3<f32>,  // (4, 4, 4)
+    conv2_output: Array3<f32>,  // (16, 2, 2)
+    fc1_input: Array1<f32>,     // (64) flattened conv2 output
+    fc1_output: Array1<f32>,    // (32)
+    fc2_output: Array1<f32>,    // (4)
 }
 
 impl PolicyModel {
@@ -33,28 +42,64 @@ impl PolicyModel {
         fc2_weight: Array2<f32>,
         fc2_bias: Array1<f32>,
     ) -> Self {
+        // Network architecture constants
+        let input_channels = 1;
+        let input_height = 4;
+        let input_width = 4;
+        let num_actions = 4;
+        let conv1_channels = 4;
+        let conv2_channels = 16;
+        let conv2_padding = 0;
+        let fc1_channels = 32;
+
         // Create layers
-        let conv1 = PaddedConv2dLayer::new(32, 1, 4, 4, 3, conv1_weight, conv1_bias);
-        let relu1 = ReLULayer::new(32 * 4 * 4);
-        let conv2 = PaddedConv2dLayer::new(64, 32, 4, 4, 3, conv2_weight, conv2_bias);
-        let relu2 = ReLULayer::new(64 * 4 * 4);
-        let fc1 = DenseLayer::new(256, 1024, fc1_weight, fc1_bias);
-        let relu3 = ReLULayer::new(256);
-        let fc2 = DenseLayer::new(128, 256, fc2_weight, fc2_bias);
-        let softmax = SoftmaxLayer::new(4);
+        let conv1 = PaddedConv2dLayer::new(
+            conv1_channels, input_channels, input_height, input_width, 3, 
+            conv1_weight, conv1_bias
+        );
+        let relu1 = ReLULayer::new(conv1_channels * input_height * input_width);
+        
+        let conv2 = Conv2dLayer::new(
+            conv2_channels, conv1_channels, input_height, input_width, 3, 
+            conv2_weight, conv2_bias
+        );
+        let relu2 = ReLULayer::new(conv2_channels * (input_height - 2) * (input_width - 2));
+        
+        let fc1 = DenseLayer::new(
+            fc1_channels, 
+            conv2_channels * (input_height - 2) * (input_width - 2),
+            fc1_weight, 
+            fc1_bias
+        );
+        let relu3 = ReLULayer::new(fc1_channels);
+        
+        let fc2 = DenseLayer::new(
+            num_actions, 
+            fc1_channels,
+            fc2_weight, 
+            fc2_bias
+        );
+        let softmax = SoftmaxLayer::new(num_actions);
 
         // Initialize buffers
-        let input = Array3::zeros((1, 4, 4));
-        let conv1_output = Array3::zeros((32, 4, 4));
-        let conv2_output = Array3::zeros((64, 4, 4));
-        let fc1_input = Array1::zeros(1024);
-        let fc1_output = Array1::zeros(256);
-        let fc2_output = Array1::zeros(128);
-        let output = Array1::zeros(4);
+        let input = Array3::zeros((input_channels, input_height, input_width));
+        let conv1_output = Array3::zeros((conv1_channels, input_height, input_width));
+        let conv2_output = Array3::zeros((conv2_channels, input_height - 2, input_width - 2));
+        let fc1_input = Array1::zeros(conv2_channels * (input_height - 2) * (input_width - 2));
+        let fc1_output = Array1::zeros(fc1_channels);
+        let fc2_output = Array1::zeros(num_actions);
 
         Self {
+            input_channels,
+            input_height,
+            input_width,
+            num_actions,
+            conv1_channels,
+            conv2_channels,
+            conv2_padding,
+            fc1_channels,
             conv1, relu1, conv2, relu2, fc1, relu3, fc2, softmax,
-            input, conv1_output, conv2_output, fc1_input, fc1_output, fc2_output, output,
+            input, conv1_output, conv2_output, fc1_input, fc1_output, fc2_output,
         }
     }
 
@@ -79,12 +124,8 @@ impl PolicyModel {
         self.relu3.activate(&mut self.fc1_output);
         
         self.fc2.forward(&self.fc1_output, &mut self.fc2_output);
-        self.relu3.activate(&mut self.fc2_output);
-        
-        // Final dense layer and softmax
-        self.fc2.forward(&self.fc2_output, &mut self.output);
-        self.softmax.activate(&mut self.output);
+        self.softmax.activate(&mut self.fc2_output);
 
-        &self.output
+        &self.fc2_output
     }
 }
