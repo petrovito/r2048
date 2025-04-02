@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 
+import logging
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -10,7 +11,7 @@ from tqdm import tqdm
 from .models.base import BaseModel
 from .data.dataset import GameDataset
 from .data.batch_sampler import TrajectoryBatchSampler, collate_trajectories
-from .data.trajectory import Trajectory
+from .types import TrainResult
 from .utils.config import TrainingConfig
 from .utils.metrics import compute_metrics
 
@@ -45,11 +46,18 @@ class PolicyGradientTrainer:
         
         progress_bar = tqdm(train_loader, desc=f"Epoch {epoch}")
         for batch in progress_bar:
+            # Zero gradients at the start of each batch
+            self.optimizer.zero_grad()
+            
             # Process each trajectory in the batch
+            batch_loss = 0.0
             for trajectory in batch:
                 states = trajectory.states.to(self.device)
                 actions = trajectory.actions.to(self.device)
                 length = trajectory.length
+                
+                # Add channel dimension to states
+                states = states.unsqueeze(1)  # Shape: [batch_size, 1, 4, 4]
                 
                 # Get action probabilities
                 action_probs = self.model(states)
@@ -60,15 +68,19 @@ class PolicyGradientTrainer:
                 
                 # Calculate policy gradient loss using trajectory length as reward
                 loss = -torch.mean(selected_log_probs * length)
+                batch_loss += loss
                 
-                # Backward pass
-                self.optimizer.zero_grad()
-                loss.backward()
-                self.optimizer.step()
-                
-                total_loss += loss.item()
                 total_length += length
                 num_trajectories += 1
+            
+            # Average the loss over trajectories in the batch
+            batch_loss = batch_loss / len(batch)
+            
+            # Backward pass for the entire batch
+            batch_loss.backward()
+            self.optimizer.step()
+            
+            total_loss += batch_loss.item()
             
             # Update progress bar
             progress_bar.set_postfix({
@@ -97,7 +109,10 @@ class PolicyGradientTrainer:
                 for trajectory in batch:
                     states = trajectory.states.to(self.device)
                     actions = trajectory.actions.to(self.device)
-                    length = trajectory.length.item()
+                    length = trajectory.length
+                    
+                    # Add channel dimension to states
+                    states = states.unsqueeze(1)  # Shape: [batch_size, 1, 4, 4]
                     
                     # Get action probabilities
                     action_probs = self.model(states)
@@ -122,7 +137,7 @@ class PolicyGradientTrainer:
         self,
         train_dataset: GameDataset,
         val_dataset: GameDataset,
-    ) -> Dict[str, Any]:
+    ) -> TrainResult:
         # Calculate max samples per batch based on batch_size
         max_samples_per_batch = self.config.batch_size * 4 * 4  # Assuming 4x4 grid
         
@@ -141,13 +156,12 @@ class PolicyGradientTrainer:
             collate_fn=collate_trajectories,
         )
         
-        best_val_length = float("-inf")
-        history = {
-            "train_loss": [],
-            "train_avg_length": [],
-            "val_loss": [],
-            "val_avg_length": [],
-        }
+        result = TrainResult(
+            train_loss=[],
+            train_avg_length=[],
+            val_loss=[],
+            val_avg_length=[],
+        )
         
         for epoch in range(self.config.num_epochs):
             # Train epoch
@@ -157,17 +171,16 @@ class PolicyGradientTrainer:
             val_metrics = self.validate(val_loader)
             
             # Save best model
-            if val_metrics["val_avg_length"] > best_val_length:
-                best_val_length = val_metrics["val_avg_length"]
+            if val_metrics["val_avg_length"] > result.best_val_length:
                 self.save_model(self.config.model_save_path)
             
-            # Update history
-            for k, v in train_metrics.items():
-                history[k].append(v)
-            for k, v in val_metrics.items():
-                history[k].append(v)
+            # Update result
+            result.train_loss.append(train_metrics["train_loss"])
+            result.train_avg_length.append(train_metrics["train_avg_length"])
+            result.val_loss.append(val_metrics["val_loss"])
+            result.val_avg_length.append(val_metrics["val_avg_length"])
         
-        return history
+        return result
     
     def save_model(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)

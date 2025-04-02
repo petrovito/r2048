@@ -4,10 +4,12 @@ from pathlib import Path
 import random
 import torch
 import numpy as np
+from training.utils.model_loader import ModelLoader
 
+from .models.policy_network import PolicyNetwork
 from .utils.config import TrainingConfig
+from .trainer import PolicyGradientTrainer
 from .utils.data_loader import GameDataLoader
-from .utils.model_loader import ModelLoader
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -66,27 +68,7 @@ def parse_args():
         default=0.8,
         help="Fraction of data to use for training",
     )
-    
-    # Model arguments
-    parser.add_argument(
-        "--input_channels",
-        type=int,
-        default=1,
-        help="Number of input channels",
-    )
-    parser.add_argument(
-        "--dropout",
-        type=float,
-        default=0.5,
-        help="Dropout rate",
-    )
-    
-    # Logging arguments
-    parser.add_argument(
-        "--use_wandb",
-        action="store_true",
-        help="Use Weights & Biases for logging",
-    )
+
     
     # Random seed
     parser.add_argument(
@@ -117,48 +99,36 @@ def create_config(args) -> TrainingConfig:
         learning_rate=args.learning_rate,
         weight_decay=args.weight_decay,
         train_val_split=args.train_val_split,
-        input_channels=args.input_channels,
-        use_wandb=args.use_wandb,
         model_save_path=args.save_dir / "best_model.pt",
     )
 
 
 def main():
+    # Set up logging
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+    
+    # Parse command line arguments
     args = parse_args()
     
-    # Set up environment
-    setup_environment(args.seed)
+    # Load trajectories
+    data_loader = GameDataLoader(args.log_path)
+    train_trajectories, val_trajectories = data_loader.get_datasets()
     
-    # Create save directory
-    args.save_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Create config
+    # Create model and trainer
     config = create_config(args)
+    model_loader = ModelLoader(config)
+    model_loader.initialize_model()
+
+    model = model_loader.model
+    trainer = PolicyGradientTrainer(model, config)
     
-    # Initialize components
-    data_loader = GameDataLoader(
-        log_path=args.log_path,
-        train_val_split=config.train_val_split,
-        seed=args.seed
-    )
+    # Train
+    logger.info("Starting training...")
+    result = trainer.train(train_trajectories, val_trajectories)
     
-    model_loader = ModelLoader(
-        config=config,
-        load_model_path=args.load_model
-    )
-    
-    # Get datasets and trainer
-    train_dataset, val_dataset = data_loader.get_datasets()
-    trainer = model_loader.get_trainer()
-    
-    # Train the model
-    history = trainer.train(train_dataset, val_dataset)
-    
-    # Log final results
-    logger.info("Training completed!")
-    logger.info(f"Best validation reward: {max(history['val_reward'])}")
-    logger.info(f"Final training reward: {history['train_reward'][-1]}")
-    logger.info(f"Final validation reward: {history['val_reward'][-1]}")
+    logger.info(f"Training completed!")
+    logger.info(f"Best validation length: {result.best_val_length} at epoch {result.best_epoch}")
 
 
 if __name__ == "__main__":

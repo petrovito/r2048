@@ -15,8 +15,7 @@ logger = logging.getLogger(__name__)
 class ModelLoader:
     def __init__(
         self,
-        config: TrainingConfig,
-        load_model_path: Optional[Path] = None,
+        config: TrainingConfig
     ):
         """Initialize the model loader.
         
@@ -25,7 +24,6 @@ class ModelLoader:
             load_model_path: Optional path to an existing model to load
         """
         self.config = config
-        self.load_model_path = load_model_path
         self.model = None
         self.trainer = None
         
@@ -34,24 +32,13 @@ class ModelLoader:
         # Create model
         self.model = PolicyNetwork()
         
-        # Create trainer
-        self.trainer = PolicyGradientTrainer(self.model, self.config)
         
-        # Load existing model if specified
-        if self.load_model_path:
-            logger.info(f"Loading model from {self.load_model_path}")
-            self.trainer.load_model(self.load_model_path)
-            logger.info("Model loaded successfully")
+        # # Load existing model if specified
+        # if self.load_model_path:
+        #     logger.info(f"Loading model from {self.load_model_path}")
+        #     self.trainer.load_model(self.load_model_path)
+        #     logger.info("Model loaded successfully")
             
-    def get_trainer(self) -> PolicyGradientTrainer:
-        """Get the initialized trainer.
-        
-        Returns:
-            The initialized PolicyGradientTrainer instance
-        """
-        if self.trainer is None:
-            self.initialize_model()
-        return self.trainer
 
     def save_model_as_npz(self, save_path: Path) -> None:
         """Save the model parameters as an npz file.

@@ -4,7 +4,7 @@ import torch
 from torch.utils.data import DataLoader, Dataset
 
 from ..data.dataset import GameDataset
-from .trajectory import Trajectory
+from ..types import Trajectory
 
 
 class TrajectoryBatchSampler:

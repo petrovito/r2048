@@ -17,6 +17,7 @@ class TrainingConfig:
     learning_rate: float = 0.001
     weight_decay: float = 0.0001
     num_workers: int = 4
+    train_val_split: float = 0.8
     
     # Paths
     model_save_path: Path = field(default_factory=lambda: Path("models/policy_network.pt"))
