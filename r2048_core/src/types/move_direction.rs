@@ -19,6 +19,10 @@ impl MoveDirection {
             MoveDirection::Right,
         ]
     }
+
+    pub fn iter() -> impl Iterator<Item = MoveDirection> {
+        MoveDirection::all().into_iter()
+    }
 }
 
 impl Display for MoveDirection {

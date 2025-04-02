@@ -1,6 +1,10 @@
 use crate::types::{MoveDirection, Position};
 use crate::types::errors::GameError;
 
+mod nn;
+
+pub use nn::NNPolicyProvider;
+
 /// Represents a policy of move probabilities
 pub struct MovePolicy {
     probabilities: [f32; 4],
