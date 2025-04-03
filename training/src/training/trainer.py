@@ -8,6 +8,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
+from .utils.model_loader import ModelLoader
 from .models.base import BaseModel
 from .data.dataset import GameDataset
 from .data.batch_sampler import TrajectoryBatchSampler, collate_trajectories
@@ -16,14 +17,17 @@ from .utils.config import TrainingConfig
 from .utils.metrics import compute_metrics
 
 
+logger = logging.getLogger(__name__)
+
 class PolicyGradientTrainer:
     def __init__(
         self,
-        model: BaseModel,
+        model_loader: ModelLoader,
         config: TrainingConfig,
         device: Optional[str] = None,
     ):
-        self.model = model
+        self.model_loader = model_loader
+        self.model = model_loader.load_model()
         self.config = config
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.model.to(self.device)
@@ -33,13 +37,13 @@ class PolicyGradientTrainer:
             lr=config.learning_rate,
             weight_decay=config.weight_decay,
         )
+        self.model.train()
     
     def train_epoch(
         self,
         train_loader: DataLoader,
         epoch: int,
     ) -> Dict[str, float]:
-        self.model.train()
         total_loss = 0
         total_length = 0
         num_trajectories = 0
@@ -67,7 +71,7 @@ class PolicyGradientTrainer:
                 selected_log_probs = log_probs[range(length), actions]
                 
                 # Calculate policy gradient loss using trajectory length as reward
-                loss = -torch.mean(selected_log_probs * length)
+                loss = -torch.sum(selected_log_probs) * length
                 batch_loss += loss
                 
                 total_length += length
@@ -162,6 +166,8 @@ class PolicyGradientTrainer:
             val_loss=[],
             val_avg_length=[],
         )
+
+        best_val_loss = float("inf")
         
         for epoch in range(self.config.num_epochs):
             # Train epoch
@@ -171,8 +177,10 @@ class PolicyGradientTrainer:
             val_metrics = self.validate(val_loader)
             
             # Save best model
-            if val_metrics["val_avg_length"] > result.best_val_length:
-                self.save_model(self.config.model_save_path)
+            if val_metrics["val_loss"] < best_val_loss:
+                best_val_loss = val_metrics["val_loss"]
+                logger.info(f"New best validation loss: {best_val_loss}")
+                self.model_loader.save_model()
             
             # Update result
             result.train_loss.append(train_metrics["train_loss"])
@@ -182,19 +190,3 @@ class PolicyGradientTrainer:
         
         return result
     
-    def save_model(self, path: Path) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        torch.save(
-            {
-                "model_state_dict": self.model.state_dict(),
-                "optimizer_state_dict": self.optimizer.state_dict(),
-                "config": self.config.to_dict(),
-            },
-            path,
-        )
-    
-    def load_model(self, path: Path) -> None:
-        checkpoint = torch.load(path)
-        self.model.load_state_dict(checkpoint["model_state_dict"])
-        self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-        self.config = TrainingConfig.from_dict(checkpoint["config"]) 

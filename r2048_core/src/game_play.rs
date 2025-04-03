@@ -30,7 +30,7 @@ impl GamePlayer {
     }
 
     /// Plays a complete game
-    pub fn play_a_game(&mut self) {
+    pub fn play_a_game(&mut self) -> u32{
         let _ = self.game.start_game();
 
         while !self.game.is_over() {
@@ -38,10 +38,12 @@ impl GamePlayer {
         }
 
         if let Ok(_) = self.game_logger.borrow_mut().log_game(&self.game) {
-            info!("Game logged successfully. Score: {}", self.game.current_position().score());
+            //info!("Game logged successfully. Score: {}", self.game.current_position().score());
         } else {
             error!("Failed to log game");
         }
+        let score = self.game.current_position().score();
+        score
     }
 
     /// Plays a single move

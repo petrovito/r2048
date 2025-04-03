@@ -31,6 +31,13 @@ def parse_args():
         default=Path("models"),
         help="Directory to save the model and processed data",
     )
+
+    parser.add_argument(
+        "--npz_save_path",
+        type=Path,
+        required=True,
+        help="Path to save the model as npz",
+    )
     parser.add_argument(
         "--load_model",
         type=Path,
@@ -47,7 +54,7 @@ def parse_args():
     parser.add_argument(
         "--batch_size",
         type=int,
-        default=32,
+        default=512,
         help="Batch size for training",
     )
     parser.add_argument(
@@ -100,6 +107,7 @@ def create_config(args) -> TrainingConfig:
         weight_decay=args.weight_decay,
         train_val_split=args.train_val_split,
         model_save_path=args.save_dir / "best_model.pt",
+        npz_save_path=args.npz_save_path,
     )
 
 
@@ -118,10 +126,7 @@ def main():
     # Create model and trainer
     config = create_config(args)
     model_loader = ModelLoader(config)
-    model_loader.initialize_model()
-
-    model = model_loader.model
-    trainer = PolicyGradientTrainer(model, config)
+    trainer = PolicyGradientTrainer(model_loader, config)
     
     # Train
     logger.info("Starting training...")
@@ -129,6 +134,11 @@ def main():
     
     logger.info(f"Training completed!")
     logger.info(f"Best validation length: {result.best_val_length} at epoch {result.best_epoch}")
+
+    # Load the best model and save it as npz
+    model_loader.load_model()
+    model_loader.save_model_as_npz(args.npz_save_path)
+    logger.info(f"Model saved as npz to {args.npz_save_path}")
 
 
 if __name__ == "__main__":

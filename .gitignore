@@ -9,3 +9,5 @@ training/data/
 
 __pycache__/
 models/
+game_data/
+

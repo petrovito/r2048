@@ -7,7 +7,6 @@ import numpy as np
 import torch
 
 from ..models.policy_network import PolicyNetwork
-from ..trainer import PolicyGradientTrainer
 from ..utils.config import TrainingConfig
 
 logger = logging.getLogger(__name__)
@@ -23,21 +22,32 @@ class ModelLoader:
             config: Training configuration
             load_model_path: Optional path to an existing model to load
         """
-        self.config = config
-        self.model = None
-        self.trainer = None
-        
-    def initialize_model(self) -> None:
-        """Initialize the model and trainer."""
-        # Create model
+        self.config: TrainingConfig = config
+        self.model_path: Path = Path(config.model_save_path)
+        self.model: PolicyNetwork = None
+
+    def load_model(self) -> PolicyNetwork:
         self.model = PolicyNetwork()
+        if self.model_path.exists():
+            # Load existing model
+            self.model.load_state_dict(torch.load(self.model_path))
+            logger.info(f"Model loaded from {self.model_path}")
+        return self.model
+
+    def save_model(self) -> None:
+        """Save the model parameters as a PyTorch file.
         
-        
-        # # Load existing model if specified
-        # if self.load_model_path:
-        #     logger.info(f"Loading model from {self.load_model_path}")
-        #     self.trainer.load_model(self.load_model_path)
-        #     logger.info("Model loaded successfully")
+        Args:
+            save_path: Path to save the PyTorch file
+        """
+        if self.model is None:
+            raise ValueError("Model not initialized. Call initialize_model() first.")
+            
+        torch.save(self.model.state_dict(), self.model_path)
+        logger.info(f"Model saved to {self.model_path}")
+
+
+
             
 
     def save_model_as_npz(self, save_path: Path) -> None:
@@ -61,7 +71,6 @@ class ModelLoader:
         # Save as npz
         np.savez(save_path, **np_dict)
         logger.info(f"Model saved to {save_path}")
-
 
 def main():
     """Main function to initialize and save a model."""

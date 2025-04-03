@@ -16,11 +16,12 @@ class TrainingConfig:
     batch_size: int = 32
     learning_rate: float = 0.001
     weight_decay: float = 0.0001
-    num_workers: int = 4
+    num_workers: int = 3
     train_val_split: float = 0.8
     
     # Paths
     model_save_path: Path = field(default_factory=lambda: Path("models/policy_network.pt"))
+    npz_save_path: Path = field(default_factory=lambda: Path("models/policy_network.npz"))
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert config to dictionary."""
@@ -33,6 +34,7 @@ class TrainingConfig:
             "weight_decay": self.weight_decay,
             "num_workers": self.num_workers,
             "model_save_path": str(self.model_save_path),
+            "npz_save_path": str(self.npz_save_path),
         }
     
     @classmethod

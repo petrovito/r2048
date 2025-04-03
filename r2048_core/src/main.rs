@@ -50,8 +50,13 @@ fn main() {
 
     let env = Environment::new(specs);
 
-    for _ in 0..args.games {
-        env.game_player.borrow_mut().play_a_game();
+    let mut total_score: u32 = 0;
+
+    for i in 0..args.games {
+        if i % 50 == 0 && i != 0 {
+            info!("Played game {}/{}, average length {}",  i, args.games, total_score / i as u32);
+        }
+        total_score += env.game_player.borrow_mut().play_a_game();
     }
 
     info!("r2048 completed");
