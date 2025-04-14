@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, Optional
+from typing import Generator, List, Dict, Any, Optional
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, Dataset
@@ -15,7 +15,7 @@ class TrajectoryBatchSampler:
         self.max_samples_per_batch = max_samples_per_batch
         self.indices = list(range(len(dataset)))
     
-    def __iter__(self):
+    def __iter__(self) -> Generator[List[int], None, None]:
         np.random.shuffle(self.indices)
         current_batch = []
         current_samples = 0

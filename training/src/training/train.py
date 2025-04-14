@@ -8,8 +8,8 @@ from training.utils.model_loader import ModelLoader
 
 from .models.policy_network import PolicyNetwork
 from .utils.config import TrainingConfig
-from .trainer import PolicyGradientTrainer
-from .utils.data_loader import GameDataLoader
+from .train.trainer import PolicyGradientTrainer
+from .preprocess.data_loader import GameDataLoader
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -54,7 +54,7 @@ def parse_args():
     parser.add_argument(
         "--batch_size",
         type=int,
-        default=512,
+        default=2048,
         help="Batch size for training",
     )
     parser.add_argument(
