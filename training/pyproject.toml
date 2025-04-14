@@ -1,39 +1,39 @@
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
 [project]
-name = "training"
+name = "training" 
 version = "0.1.0"
 description = "Training utilities for the 2048 CNN model"
 requires-python = ">=3.8"
 dependencies = [
+]
+
+
+[project.optional-dependencies]
+model_training = [
     "numpy>=1.21.0",
     "torch>=2.0.0",
     "torchvision>=0.15.0",
     "pandas>=1.3.0",
     "matplotlib>=3.4.0",
     "tqdm>=4.62.0",
-    "wandb>=0.12.0",
     "pyyaml>=5.4.0",
 ]
-
-[project.optional-dependencies]
-dev = [
-    "pytest>=6.0",
-    "black>=21.0",
-    "isort>=5.0",
-    "mypy>=0.910",
-    "flake8>=3.9",
+train_manager = [
+    "training[model_training]",  # Depends on model_training
 ]
 
 [project.scripts]
-train-2048 = "training.train:main"
+train-manager = "train_manager.main:main"
+train-2048 = "model_training.train:main"
 
-[tool.black]
-line-length = 88
-target-version = ['py38']
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-[tool.isort]
-profile = "black"
-multi_line_output = 3
+[tool.hatch.build.targets.wheel]
+packages = [
+    "src/model_training",
+    "src/train_manager",
+]
+
+[tool.hatch.metadata]
+allow-direct-references = true
