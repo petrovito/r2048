@@ -2,7 +2,7 @@
 from pathlib import Path
 from typing import List
 
-from training.preprocess.types import ParsedTrajectory
+from .types import ParsedTrajectory
 
 
 class FileParser:
@@ -35,7 +35,7 @@ class FileParser:
         trajectories = []
         with open(file_path, 'r') as f:
             lines = f.readlines()
-            current_trajectory = []
+            current_trajectory: List[str] = []
             for line in lines:
                 if line == 'NEW GAME\n':
                     if current_trajectory:

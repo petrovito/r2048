@@ -4,19 +4,19 @@ from pathlib import Path
 class SimulatorRunner:
     def __init__(self, cargo_manifest_path: str):
         self.cargo_manifest_path = cargo_manifest_path
+        self.selector = "policy"
 
-    def run_simulation(self, games: int, log_path: str, selector: str, model_path: str):
+    def run_simulation(self, games: int, log_path: Path, model_path: str):
         """Run the Cargo simulation."""
-        log_file = Path(log_path)
-        log_file.parent.mkdir(parents=True, exist_ok=True)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
 
         cargo_cmd = [
             "cargo", "run",
             "--manifest-path", self.cargo_manifest_path,
             "--",
             "--games", str(games),
-            "--log-path", log_path,
-            "--selector", selector,
+            "--log-path", str(log_path),
+            "--selector", self.selector,
             "--model-path", model_path
         ]
 

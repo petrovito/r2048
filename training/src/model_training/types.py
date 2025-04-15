@@ -7,9 +7,9 @@ import torch
 @dataclass
 class TrainResult:
     """Stores the results of a training run."""
-    train_loss: List[float] = []
-    val_loss: List[float] = []
-    val_exp_length: List[float] = []
+    train_loss: List[float]
+    val_loss: List[float]
+    val_exp_length: List[float]
     
     def to_dict(self) -> Dict[str, List[float]]:
         """Convert the result to a dictionary."""
@@ -31,7 +31,7 @@ class TrainResult:
         return cls(
             train_loss=df["train_loss"].tolist(),
             val_loss=df["val_loss"].tolist(),
-            val_avg_length=df["val_exp_length"].tolist(),
+            val_exp_length=df["val_exp_length"].tolist(),
         )
     
     @property

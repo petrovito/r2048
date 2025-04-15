@@ -1,39 +1,35 @@
-from simulator_runner import SimulatorRunner
-from train_handler import TrainHandler
+import argparse
 
-class TrainManager:
-    def __init__(self, simulator_runner: SimulatorRunner, train_handler: TrainHandler):
-        self.simulator_runner = simulator_runner
-        self.train_handler = train_handler
-
-    def run_training_cycle(self, iterations: int, base_log_path: str, start_index: int, games: int, selector: str, model_path: str, num_epochs: int, npz_save_path: str):
-        for i in range(start_index, start_index + iterations):
-            log_file = f"{base_log_path}{i}.txt"
-
-            print(f"\nIteration {i - start_index + 1}/{iterations}")
-            print(f"Log file: {log_file}")
-
-            # Run simulation
-            self.simulator_runner.run_simulation(games, log_file, selector, model_path)
-
-            # Train model
-            self.train_handler.train_model(log_file, num_epochs, npz_save_path)
-
-            print(f"Completed iteration {i - start_index + 1}")
+from .simulator_runner import SimulatorRunner
+from .train_handler import TrainHandler
+from .train_manager import TrainManager
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Train Manager CLI")
+    parser.add_argument("--base_folder", type=str, default="training_iterations", help="Base folder for training iterations")
+    parser.add_argument("--iterations", type=int, default=5, help="Number of training iterations")
+    parser.add_argument("--games", type=int, default=200, help="Number of games per iteration")
+    parser.add_argument("--num_epochs", type=int, default=50, help="Number of epochs for training")
+
+    args = parser.parse_args()
+
     simulator_runner = SimulatorRunner(cargo_manifest_path="r2048_core/Cargo.toml")
-    train_handler = TrainHandler(save_dir="models")
-
-    train_manager = TrainManager(simulator_runner, train_handler)
-
-    train_manager.run_training_cycle(
-        iterations=5,
-        base_log_path="game_data/game_logs",
-        start_index=0,
-        games=200,
-        selector="policy",
-        model_path="models/best.npz",
-        num_epochs=50,
-        npz_save_path="models/best.npz"
+    train_handler = TrainHandler(
+        num_epochs=args.num_epochs,
+        batch_size=2048,
+        learning_rate=0.001,
+        weight_decay=0.0001,
+        train_val_split=0.8,
+        seed=42
     )
+
+    train_manager = TrainManager(
+        simulator_runner=simulator_runner,
+        train_handler=train_handler,
+        base_folder=args.base_folder,
+        iterations=args.iterations,
+        games=args.games,
+        num_epochs=args.num_epochs
+    )
+
+    train_manager.run_training_cycle()

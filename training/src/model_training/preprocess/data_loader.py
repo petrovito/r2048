@@ -1,14 +1,17 @@
 import logging
 from pathlib import Path
+import random
 from typing import List, Tuple
 import numpy as np
 import torch
 from torch.utils.data import Dataset, random_split
 from dataclasses import dataclass
 from collections import defaultdict
+from typing import TypeVar, Optional
 
-from training.preprocess.types import ParsedTrajectory
-from training.preprocess.validation_sampler import ValidationSampler, LengthBasedSampler
+from .types import ParsedTrajectory
+from .validation_sampler import ValidationSampler, LengthBasedSampler
+from .file_parser import FileParser
 
 from ..data.dataset import GameDataset
 
@@ -20,12 +23,12 @@ class GameDataLoader:
     def __init__(
         self,
         train_file_paths: List[Path],
-        extra_val_file_paths: List[Path],
+        extra_val_file_paths: Optional[List[Path]] = None,
         train_val_split: float = 0.8,
         val_max_per_bin: int = 100,
         val_bin_step: int = 10,
         seed: int = 42,
-        validation_sampler: ValidationSampler = None
+        validation_sampler: Optional[ValidationSampler] = None
     ):
         """Initialize the data loader with multiple file paths.
 
@@ -39,17 +42,17 @@ class GameDataLoader:
             validation_sampler: Instance of ValidationSampler for flexible validation sampling.
         """
         self.train_file_paths = train_file_paths
-        self.extra_val_file_paths = extra_val_file_paths
+        self.extra_val_file_paths = extra_val_file_paths or []
         self.train_val_split = train_val_split
         self.val_max_per_bin = val_max_per_bin
         self.val_bin_step = val_bin_step
         self.seed = seed
         self.validation_sampler = validation_sampler or LengthBasedSampler(val_max_per_bin, val_bin_step)
-        self.train_trajectories = None
-        self.extra_val_trajectories = None
-        self.train_subset = None
-        self.val_subset = None
-        self.pruned_val_trajectories = None
+        self.train_trajectories: List[ParsedTrajectory] = []
+        self.extra_val_trajectories: List[ParsedTrajectory] = []
+        self.train_subset: List[ParsedTrajectory] = []
+        self.val_subset: List[ParsedTrajectory] = []
+        self.pruned_val_trajectories: List[ParsedTrajectory] = []
 
 
     def parse_files(self, file_paths: List[Path]) -> List[ParsedTrajectory]:
@@ -61,9 +64,10 @@ class GameDataLoader:
         Returns:
             Combined list of ParsedTrajectory objects from all files.
         """
-        all_trajectories = []
+        file_parser = FileParser()
+        all_trajectories: List[ParsedTrajectory] = []
         for file_path in file_paths:
-            trajectories = self._parse_game_log(file_path)
+            trajectories = file_parser.parse_game_log(file_path)
             all_trajectories.extend(trajectories)
         return all_trajectories
 
@@ -74,15 +78,12 @@ class GameDataLoader:
         logger.info(f"Parsed {len(self.train_trajectories)} training trajectories")
         logger.info(f"Parsed {len(self.extra_val_trajectories)} extra validation trajectories")
 
+    
+
+
     def split_data(self) -> None:
         """Split training trajectories into training and validation subsets."""
-        total_train_samples = len(self.train_trajectories)
-        train_size = int(total_train_samples * self.train_val_split)
-        val_size = total_train_samples - train_size
-        if val_size == 0:
-            raise ValueError("No validation samples from training data.")
-        torch.manual_seed(self.seed)
-        self.train_subset, self.val_subset = random_split(self.train_trajectories, [train_size, val_size])
+        self.train_subset, self.val_subset = split_list(self.train_trajectories, self.train_val_split)
         logger.info(f"Training subset size: {len(self.train_subset)}")
         logger.info(f"Validation subset size from training: {len(self.val_subset)}")
 
@@ -117,11 +118,9 @@ class GameDataLoader:
         torch.manual_seed(self.seed)
         self.load_data()
         self.split_data()
-        total_val_trajectories = (
-            [self.train_trajectories[i] for i in self.val_subset.indices] + self.extra_val_trajectories
-        )
+        total_val_trajectories = self.extra_val_trajectories + self.val_subset
         self.pruned_val_trajectories = self.validation_sampler.sample(total_val_trajectories)
-        train_trajectories = [self.train_trajectories[i] for i in self.train_subset.indices]
+        train_trajectories = self.train_subset
         
         train_tensor_list = self.trajectories_to_tensors(train_trajectories)
         val_tensor_list = self.trajectories_to_tensors(self.pruned_val_trajectories)
@@ -132,3 +131,9 @@ class GameDataLoader:
         logger.info(f"Final training dataset size: {len(train_dataset)}")
         logger.info(f"Final validation dataset size: {len(val_dataset)}")
         return train_dataset, val_dataset
+    
+_T = TypeVar("_T")    
+def split_list(lst: List[_T], ratio=0.8) -> Tuple[List[_T], List[_T]]:
+    random.shuffle(lst)  # Shuffle the list in place
+    split_idx = int(len(lst) * ratio)  # Calculate split index
+    return lst[:split_idx], lst[split_idx:]

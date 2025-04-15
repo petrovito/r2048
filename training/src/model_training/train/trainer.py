@@ -8,7 +8,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from ..utils.model_loader import ModelLoader
+from ..models.model_loader import ModelLoader
 from ..models.base import BaseModel
 from ..data.dataset import GameDataset
 from ..data.batch_sampler import TrajectoryBatchSampler, collate_trajectories
@@ -25,7 +25,7 @@ class PolicyGradientTrainer:
         model_loader: ModelLoader,
         config: TrainingConfig,
         device: Optional[str] = None,
-        validator: Validator = None,
+        validator: Optional[Validator] = None,
     ):
         self.model_loader = model_loader
         self.model = model_loader.load_model()
@@ -46,7 +46,7 @@ class PolicyGradientTrainer:
         train_loader: DataLoader,
         epoch: int,
     ) -> Dict[str, float]:
-        total_loss = 0
+        total_loss = 0.0
         num_trajectories = 0
         
         progress_bar = tqdm(train_loader, desc=f"Epoch {epoch}")
@@ -56,7 +56,7 @@ class PolicyGradientTrainer:
             self.optimizer.zero_grad()
             
             # Process each trajectory in the batch
-            batch_loss = 0.0
+            batch_loss = torch.tensor(0.0)
             trajectory: Trajectory
             for trajectory in batch:
                 states = trajectory.states.to(self.device)
@@ -79,11 +79,9 @@ class PolicyGradientTrainer:
                 
                 num_trajectories += 1
             
-            # Average the loss over trajectories in the entire dataset
-            batch_loss = batch_loss / len(train_loader.dataset)
             
             # Backward pass for the entire batch
-            batch_loss.backward()
+            batch_loss.backward()  # Ensure batch_loss is a tensor
             self.optimizer.step()
             
             total_loss += batch_loss.item()
@@ -129,9 +127,8 @@ class PolicyGradientTrainer:
         
         result = TrainResult(
             train_loss=[],
-            train_avg_length=[],
             val_loss=[],
-            val_avg_length=[],
+            val_exp_length=[],  # Corrected from val_avg_length
         )
 
         best_val_loss = float("inf")

@@ -21,7 +21,7 @@ class Validator(ABC):
 class DefaultValidator(Validator):
     def validate(self, model, val_loader, device) -> ValidationMetrics:
         model.eval()
-        total_loss = 0
+        total_loss = 0.0
         total_length = 0
         num_trajectories = 0
 

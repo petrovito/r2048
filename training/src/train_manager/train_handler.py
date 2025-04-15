@@ -1,35 +1,39 @@
-import subprocess
 import logging
 from pathlib import Path
-from training.model_training.src.train import PolicyGradientTrainer, ModelLoader, create_config, setup_environment
-from training.model_training.src.preprocess.data_loader import GameDataLoader
-from training.model_training.src.utils.config import TrainingConfig
+
+from model_training.main import PolicyGradientTrainer, ModelLoader, setup_environment
+from model_training.preprocess.data_loader import GameDataLoader
+from model_training.utils.config import TrainingConfig
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 
 class TrainHandler:
-    def __init__(self, save_dir: str):
-        self.save_dir = save_dir
-        Path(self.save_dir).mkdir(parents=True, exist_ok=True)
-
-
-    def train_model(log_path: Path, save_dir: Path, npz_save_path: Path, num_epochs: int = 100, batch_size: int = 2048, learning_rate: float = 0.001, weight_decay: float = 0.0001, train_val_split: float = 0.8, seed: int = 42):
-        # Set up logging
-        logging.basicConfig(level=logging.INFO)
-        logger = logging.getLogger(__name__)
+    def __init__(self, num_epochs: int = 100, batch_size: int = 2048, learning_rate: float = 0.001, weight_decay: float = 0.0001, train_val_split: float = 0.8, seed: int = 42):
+        self.num_epochs = num_epochs
+        self.batch_size = batch_size
+        self.learning_rate = learning_rate
+        self.weight_decay = weight_decay
+        self.train_val_split = train_val_split
+        self.seed = seed
 
         # Set up environment
-        setup_environment(seed)
+        setup_environment(self.seed)
 
+    def train_model(self, log_path: Path, save_dir: Path, npz_save_path: Path) -> None:
         # Load trajectories
-        data_loader = GameDataLoader(log_path)
+        data_loader = GameDataLoader([log_path])
         train_trajectories, val_trajectories = data_loader.get_datasets()
 
         # Create model and trainer
         config = TrainingConfig(
-            num_epochs=num_epochs,
-            batch_size=batch_size,
-            learning_rate=learning_rate,
-            weight_decay=weight_decay,
-            train_val_split=train_val_split,
+            num_epochs=self.num_epochs,
+            batch_size=self.batch_size,
+            learning_rate=self.learning_rate,
+            weight_decay=self.weight_decay,
+            train_val_split=self.train_val_split,
             model_save_path=save_dir / "best_model.pt",
             npz_save_path=npz_save_path,
         )

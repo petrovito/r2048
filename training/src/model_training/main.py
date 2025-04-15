@@ -4,8 +4,8 @@ from pathlib import Path
 import random
 import torch
 import numpy as np
-from training.utils.model_loader import ModelLoader
 
+from .models.model_loader import ModelLoader
 from .models.policy_network import PolicyNetwork
 from .utils.config import TrainingConfig
 from .train.trainer import PolicyGradientTrainer

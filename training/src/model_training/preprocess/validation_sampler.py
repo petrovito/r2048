@@ -2,9 +2,9 @@ from collections import defaultdict
 import logging
 from typing import List
 from abc import ABC, abstractmethod
-
 import torch
-from training.preprocess.types import ParsedTrajectory
+
+from .types import ParsedTrajectory
 
 logger = logging.getLogger(__name__)
 

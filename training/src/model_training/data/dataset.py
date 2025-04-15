@@ -10,7 +10,6 @@ class GameDataset(Dataset):
     def __init__(
         self,
         trajectories: List[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]],
-        transform: callable = None,
     ):
         """Initialize the dataset.
         
@@ -19,7 +18,6 @@ class GameDataset(Dataset):
             transform: Optional transform to apply to the data
         """
         self.trajectories = trajectories
-        self.transform = transform
     
     def __len__(self) -> int:
         return len(self.trajectories)
@@ -40,9 +38,6 @@ class GameDataset(Dataset):
                 - length: Scalar tensor with trajectory length
         """
         states, actions, length = self.trajectories[idx]
-        
-        if self.transform:
-            states = self.transform(states)
         
         return {
             "states": states,
